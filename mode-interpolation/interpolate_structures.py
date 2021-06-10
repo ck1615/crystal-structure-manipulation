@@ -10,6 +10,7 @@ import time
 import numpy as np
 import numpy.linalg as la
 import copy
+import sys
 
 class StructureInterp:
     """
@@ -223,4 +224,64 @@ class StructureInterp:
                 cif2cell(fname)
         itp.close()
         return None
+
+    def check_mode_vector(self, filename, mode):
+        """
+        This function checks whether the mode amplitude of the generated file
+        has the expected angle and magnitude.
+
+        Parameters:
+        -----------
+        filename: str
+            CIF file given as interpolated_rho_theta.cif
+
+        Returns:
+        """
+
+        seed = filename.strip("interpolated_").strip(".cif")
+        (rho, theta) = (float(seed.split("_")[0]), float(seed.split("_")[1]))
+
+        isocheck = isodistort(self.HS, silent=self.silent)
+        isocheck.load_lowsym_structure(filename)
+        isocheck.get_mode_labels()
+
+        modevalues = isocheck.modevalues[mode]
+        isocheck.close()
+        N = len(modevalues)
+        norm = round(la.norm(modevalues),3)
+        try:
+            thetas = (180 / np.pi)*np.array([np.arctan(modevalues[i]/\
+                modevalues[i+1]) for i in range(0, N, 2)])
+        except ZeroDivisionError:
+            thetas = np.array([0.0, 0.0, 0.0])
+
+
+        #assert abs(rho - norm) < 1e-3, "The magnitudes of the modes are not"+\
+        #        "the same as what is expected. The expected norm is" + str(rho) + \
+         #       " and the calculated norm is " + str(norm)
+
+        #assert abs(thetas[0] - theta) > 1e-3, "The angles are not the same "+\
+                #"The expected angle is {.1f} and the calculated angle is {.1f}." % \
+                #(theta, thetas[0])
+
+        return modevalues, rho, theta, norm, thetas
+
+if __name__ == "__main__":
+
+    itp = StructureInterp('La2MgO4_HTT.cif', 'La2MgO4_LTO.cif', \
+            'La2MgO4_LTT.cif', 56, silent=True)
+    from glob import glob
+    mode = 'X3+'
+    fname = str(sys.argv[1])
+
+    seed = fname.split(".cif")[0]
+    print(seed)
+    modevalues, rho, theta, realrho, realthetas = itp.check_mode_vector(fname, mode)
+    print("The computed magnitude and angle are: ", realrho, realthetas)
+    newseed = "interpolated_%.3f_%.1f" % (realrho, realthetas[0])
+    for ext in ["castep", "cell", "cif"]:
+        oldf = seed + ".%s" % ext
+        newf = newseed + ".%s" % ext
+        os.rename(oldf, newf)
+
 

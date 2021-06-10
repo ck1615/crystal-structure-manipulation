@@ -10,7 +10,12 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, \
         AutoMinorLocator, LinearLocator)
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.tri as tri
 import os
+
+plt.rcParams['font.size']=14
+plt.rcParams['xtick.labelsize']=12
+plt.rcParams['ytick.labelsize']=12
 
 class ModeLandscape:
     """
@@ -23,8 +28,9 @@ class ModeLandscape:
         self.wd = os.getcwd()
         self.minE = None
         self.httE = None
+        self.cartEnergies = {}
 
-    def extract_energies(self, rhocut=1.5, verbose=False):
+    def extract_energies(self, rhocut=1.8, verbose=False):
 
         #Change directory
         files = [file for file in os.listdir(self.dirs[0]) if "castep" \
@@ -33,7 +39,8 @@ class ModeLandscape:
         #Extract energies
         for fname in files:
             rho, theta = float(fname.split("_")[1]),\
-                        float(fname.split("_")[-1].strip(".castep"))
+                        (np.pi / 180) * float(fname.split("_")[-1].\
+                        strip(".castep"))
             cas = rc.readcas(fname)
             if rho <= rhocut:
                 self.energies[(rho, theta)] = 1e3*cas.get_energy()/cas.get_Nions()
@@ -60,31 +67,26 @@ class ModeLandscape:
         symmetry_energies = {}
         for (rho, theta) in self.energies:
             energy = self.energies[(rho, theta)]
-            phis = [90-theta, 90 + theta, 180 - theta, 180 + theta, 270 -\
-                    theta, 270 + theta, 360 - theta]
+            phis = [np.pi / 2 -theta, np.pi / 2 + theta, np.pi - theta, \
+                    np.pi + theta, 3*np.pi/2 -theta, 3*np.pi / 2 + theta,\
+                    2*np.pi - theta]
             for phi in phis:
                 symmetry_energies[(rho, phi)] = energy
 
         self.energies.update(symmetry_energies)
 
     def polar2cartesian(self):
-
-        rhos = []
-        thetas = []
-        energies = []
-
+        x = []
+        y = []
+        z = []
         for (rho, theta) in self.energies:
-            rhos.append(rho)
-            thetas.append(theta)
-            energies.append(self.energies[(rho, theta)])
+            self.cartEnergies[(rho*np.cos(theta), rho*np.sin(theta))] =\
+            self.energies[(rho, theta)]
 
-        rhos = np.array(rhos)
-        thetas = np.array(thetas)
-        energies = np.array(energies)
-
-        x, y = rhos*np.cos(thetas), rhos*np.sin(thetas)
-
-        return x, y, energies
+            x.append(rho*np.cos(theta))
+            y.append(rho*np.sin(theta))
+            z.append(self.energies[(rho, theta)])
+        return x,y,z
 
     def plot_mexican_hat(self):
 
@@ -97,6 +99,49 @@ class ModeLandscape:
 
         ax.plot_trisurf(x, y, z, cmap='viridis', edgecolor='none');
         plt.savefig("energy_landscape.pdf")
+
+    def plot_contour(self, rhocut=1.8):
+
+        npts = 200
+        ngridx = 100
+        ngridy = 100
+        x,y,z = self.polar2cartesian()
+
+        fig, ax1 = plt.subplots(nrows=1)
+
+        # -----------------------
+        # Interpolation on a grid
+        # -----------------------
+        # A contour plot of irregularly spaced data coordinates
+        # via interpolation on a grid.
+
+        # Create grid values first.
+        xi = np.linspace(-rhocut, rhocut, ngridx)
+        yi = np.linspace(-rhocut, rhocut, ngridy)
+
+        # Linearly interpolate the data (x, y) on a grid defined by (xi, yi).
+        triang = tri.Triangulation(x, y)
+        interpolator = tri.LinearTriInterpolator(triang, z)
+        Xi, Yi = np.meshgrid(xi, yi)
+        zi = interpolator(Xi, Yi)
+
+        # Note that scipy.interpolate provides means to interpolate data on a grid
+        # as well. The following would be an alternative to the four lines above:
+        #from scipy.interpolate import griddata
+        #zi = griddata((x, y), z, (xi[None,:], yi[:,None]), method='linear')
+
+        ax1.contour(xi, yi, zi, levels=14, linewidths=0.5, colors='k')
+        cntr1 = ax1.contourf(xi, yi, zi, levels=14, cmap="RdBu_r")
+
+        fig.colorbar(cntr1, ax=ax1)
+        ax1.set_xticks(np.arange(-1.5, 2, step=0.5))
+        ax1.plot(x, y, 'ko', ms=3)
+        ax1.set(xlim=(-rhocut, rhocut), ylim=(-rhocut, rhocut))
+        ax1.set_xlabel(r"$|X_{3}^{+}|\cdot\cos(\theta)$")
+        ax1.set_ylabel(r"$|X_{3}^{+}|\cdot\sin(\theta)$")
+
+        plt.tight_layout()
+        fig.savefig(self.wd + "/contour.pdf")
 
     def plot_e_vs_angle(self, title="", dir=""):
 
@@ -140,11 +185,10 @@ class ModeLandscape:
 
 if __name__ == "__main__":
 
-    Plots = PlotInterp()
+    Plots = ModeLandscape()
     Plots.extract_energies()
     Plots.symmetry_generate()
-    Plots.plot_mexican_hat()
-    
+    Plots.plot_contour()
 
 
 

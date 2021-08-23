@@ -9,8 +9,7 @@ import os
 import time
 import numpy as np
 import numpy.linalg as la
-import copy
-import sys
+from copy import deepcopy
 
 class StructureInterp:
     """
@@ -37,13 +36,11 @@ class StructureInterp:
 
     """
 
-    def __init__(self, HSfile, LS1file, LS2file, subgroup, silent=True, \
-            verbose=False):
+    def __init__(self, HSfile, LS1file, LS2file, subgroup, silent=True,
+                 verbose=False):
         self.HS = HSfile
         self.LS1 = LS1file
         self.LS2 = LS2file
-        self.LS1sub = self.LS1.replace(".cif", "_" + str(subgroup) + ".cif")
-        self.LS2sub = self.LS2.replace(".cif", "_" + str(subgroup) + ".cif")
         self.subgroup = subgroup
         self.silent = silent
         self.modeValues = None
@@ -70,17 +67,17 @@ class StructureInterp:
         --------
         LS#file_"subgroup".cif: file
             Two CIF files in the same directory for the two reduced structures
-
         """
 
         for sfile in [self.LS1, self.LS2]:
-            #Initialise ISODISTORT and get reduced structure
+            # Initialise ISODISTORT and get reduced structure
             iso = isodistort(sfile, silent=self.silent)
             iso.choose_by_spacegroup(self.subgroup)
             iso.select_space_group()
 
-            #Save CIF file and get new name
+            # Save CIF file and get new name
             sfile = sfile.replace(".cif", "_" + str(self.subgroup) + ".cif")
+            sfile = sfile.replace('.cif', '_{}.cif'.format(self.subgroup))
             iso.saveCif(fname=sfile, close=True)
             count=0
             while sfile not in os.listdir("."):
@@ -101,127 +98,141 @@ class StructureInterp:
         if 'modevals_dict.npy' in os.listdir("."):
             if self.verbose:
                 print("Reading end-member mode values from .npy file.")
-            self.modeValues = list(np.load('modevals_dict.npy', allow_pickle=\
-                    "TRUE"))
-        else:
-            #Initialise Isodistort instance with HTT
-            iso = isodistort(self.HS, silent=self.silent)
 
+            self.modeValues = list(np.load('modevals_dict.npy', allow_pickle=
+                                           "TRUE"))
+        else:
+            # Initialise Isodistort instance with HTT
+            iso = isodistort(self.HS, silent=self.silent)
             self.modeValues = []
 
-            for lsFile in [self.LS1sub, self.LS2sub]:
+            for lsFile in [self.LS1, self.LS2]:
                 iso.load_lowsym_structure(lsFile)
                 iso.get_mode_labels()
                 self.modeValues.append(iso.modevalues)
+
+            iso.close()
+
             if self.verbose:
                 return self.modeValues
             elif save2file:
                 #Save to binary file if requested
                 np.save('modevals_dict.npy', self.modeValues)
 
-    def get_interp_modevalues(self, mode, spimin=1, spimax=1, dspi=2, \
-            thetamin=0, thetamax=45.0, dtheta=1.5, save2file=True):
+    def interp_mode_vector(self, mode, rho, theta):
+
+        # Define the vectors
+        v1 = np.array(self.modeValues[0][mode])
+        v2 = np.array(self.modeValues[1][mode])
+
+        return list(rho * ((v1 / la.norm(v1)) * np.cos(2 * theta) +
+                    (v2 / la.norm(v2)) * np.sin(2 * theta)))
+
+    def get_interp_modevalues(self, mode, num_points=10, pc=10):
         """
-        This function interpolates between the values of the chosen mode.
+        This function gets interpolated mode values by first creating a 2D grid
+        of xy-points homogeneously sampling an eigth of the plane (0-45 degrees)
+        where x and y run from 0 to the maximum magnitude of the mode vectors
+        corresponding to LTT and LTO.
 
-        Parameters:
-        -----------
-        mode: str
-            The name of the mode whose values are to be interpolated. Note that
-            this mode must be present in both end structures.
+        x_max = max(rho_lto, rho_ltt)
 
-        theta: float
-            The range of "angles" to be considered.
+        Each pair (x,y) is converted into a pair (ρ, θ) via the equations:
+            ρ = sqrt(x² + y²)
+            θ = atan(y/x)
+        Conversely, we have:
+            x = ρ cos(θ)
+            y = ρ sin(θ)
 
-        dtheta: float
-            The spacing between the angles of the order parameter for the
-            interpolation.
+        For each value pair (ρ, θ), a mode vector is generated for GM1+ via the
+        formula:
+            mode(ρ, θ) = ρ(mode_lto * cos(2θ) + mode_ltt * sin(2θ))
         """
-        #Convert to radians
-        thetamin *= np.pi / 180
-        thetamax *= np.pi / 180
-        dtheta *= np.pi / 180
+        # Ensure the mode vectors of the low-symmetry structures are generated
+        self.get_extremal_mode_vectors()
 
-        #Construct range of angles
-        tvals = np.arange(thetamin, thetamax + 1e-4, dtheta)
-        #Construct range of magnitudes
-        spivals = np.arange(spimin, spimax + 1e-4, dspi)
+        # Get data for LTT and LTO structures
+        v_lto = np.array(self.modeValues[0][mode])
+        v_ltt = np.array(self.modeValues[1][mode])
+        rho_lto = la.norm(v_lto)
+        rho_ltt = la.norm(v_ltt)
+        x_lto, y_lto = rho_lto, 0.0
+        x_ltt, y_ltt = rho_ltt / np.sqrt(2), rho_ltt / np.sqrt(2)
 
-        #Get mode values if None
-        if self.modeValues is None:
-            self.get_extremal_mode_vectors()
+        # Define maximum magnitude to sample (relative)
+        rho_max = max(rho_lto, rho_ltt) * (1 + pc / 100)
 
-        #Get initial and final order parameter vector
-        initial = self.modeValues[0][mode]
-        final = self.modeValues[1][mode]
-        #Get initial and final mode magnitude
-        rho_init = la.norm(np.array(initial))
-        rho_final = la.norm(np.array(final))
+        # Define grid to sample 2D energy landscape
+        points = np.linspace(0, rho_max, num_points)
+        xy = [(xval, yval) for yval in points for xval in points if
+              (yval <= xval)]
 
-        if self.verbose:
-            print("Initial vector and magnitude:", initial, rho_init)
-            print("Final vector and magnitude:", final, rho_final)
+        # Add the LTT and LTO relaxed structures to the list
+        xy.append((x_lto, y_lto))
+        xy.append((x_ltt, y_ltt))
 
-        #Get scale factor
-        delta = [np.sqrt(2)*final[k]/initial[k] - 1 for k in\
-                range(1, len(initial), 2)]
-        if self.verbose:
-            print('Scale factors: ', delta)
+        # Convert grid to polar coordinates
+        self.cart2polar = {
+                xy_vals: (np.sqrt(xy_vals[0]**2 + xy_vals[1]**2),
+                          np.arctan(xy_vals[1] / xy_vals[0]))
+                if (xy_vals[0] != 0) else
+                (np.sqrt(xy_vals[0]**2 + xy_vals[1]**2), 0.0)
+                for xy_vals in xy
+                }
 
-        for t in tvals:
-            for spiral_mag in spivals:
-                #Get vector of values
-                itpList = [0 for i in range(len(initial))]
-                itpList[1::2] = ['{0:.6f}'.format(spiral_mag*(even*(np.cos(t) \
-                        + delta[i]*np.sin(t)))) for i, even in \
-                        enumerate(initial[1::2])]
-                itpList[::2] = ['{0:.6f}'.format(spiral_mag*(even*(np.sin(t) +\
-                delta[i]*np.sin(t)*np.tan(t)))) for i, even in \
-                enumerate(initial[1::2])]
-                #Get norm
-                norm = la.norm(itpList)
-                if t == 0.0:
-                    assert abs(norm - spiral_mag*rho_init) < 1e-8, r"Norm for \
-                        $\theta = 0$ not equal to LTO magnitude."
+        # Initialise list of mode vectors
+        self.interpList = {}
+        for key, values in self.cart2polar.items():
+            (rho, theta) = values
+            self.interpList[key] = deepcopy(self.modeValues[1])
+            self.interpList[key][mode] = self.interp_mode_vector(mode, rho,
+                                                                 theta)
+        return None
 
-                #Extract initial dictionary and set the mode values to interpolated
-                #values
-                itpDict = copy.deepcopy(self.modeValues[0])
-                itpDict[mode] = itpList
-                self.interpList[(norm, 180*t/np.pi)] = itpDict
-
-        if self.verbose:
-            return self.interpList
-
-    def print_interp_cif(self, print_cell=True):
-
-        #Launch ISODISTORT class instance
-        #Load HS and starting-point LS structures
+    def print_interp_cif(self, extent='all'):
+        # Launch ISODISTORT class instance
+        # Load HS and starting-point LS structures
         itp = isodistort(self.HS, silent=self.silent)
-        itp.load_lowsym_structure(self.LS1sub)
+        itp.load_lowsym_structure(self.LS1)
         itp.get_mode_labels()
 
-        #Set the mode values for this interpolation
-            #Iterate over interpolation entries
-        for key in self.interpList:
+        if extent == 'all':
+
+            for key in self.interpList:
+                if self.verbose:
+                    print(key)
+                # Define filename
+                fname = "La2MgO4_interpolated_{:.3f}_{:.3f}.cif".\
+                        format(key[0], key[1])
+
+                # Pass if filename already in directory
+                if fname in os.listdir('.'):
+                    continue
+
+                assert 'subgroup_cif(1).txt' not in os.listdir('.'),\
+                    "New structure 'subgroup_cif.txt' downloaded" + \
+                    " before previous one was converted."
+
+                # Set the mode values for this interpolation
+                # Iterate over interpolation entries
+                itp.modevalues = self.interpList[key]
+                itp.set_amplitudes()
+                itp.save_cif(fname=fname)
+        elif extent in self.interpList:
+            key = extent
             if self.verbose:
                 print(key)
 
+            # Set the mode values for this interpolation
+            # Iterate over interpolation entries
             itp.modevalues = self.interpList[key]
             itp.set_amplitudes()
-            fname="interpolated_%.3f_%.1f.cif" % (key[0], key[1])
-            itp.saveCif(fname=fname)
-            #Make sure file is in directory
-            if fname not in os.listdir('.'):
-                print("File not in directory, trying to save again.")
-                itp.saveCif(fname=fname)
-            #Make sure file is not empty
-            if os.path.getsize(os.getcwd() + '/' + fname) == 0:
-                print("File %s is empty.\nWill delete and try again." % fname)
-                itp.saveCif(fname=fname)
-            #Convert to a .cell file 
-            if print_cell:
-                cif2cell(fname)
+            fname = "La2MgO4_interpolated_{:1.3f}_{:1.3f}.cif".\
+                    format(key[0], key[1])
+            itp.save_cif(fname=fname)
+
+        # Close ISODISTORT page instance.
+        time.sleep(2)
         itp.close()
         return None
 
@@ -237,7 +248,6 @@ class StructureInterp:
 
         Returns:
         """
-
         seed = filename.strip("interpolated_").strip(".cif")
         (rho, theta) = (float(seed.split("_")[0]), float(seed.split("_")[1]))
 
@@ -254,8 +264,6 @@ class StructureInterp:
                 modevalues[i+1]) for i in range(0, N, 2)])
         except ZeroDivisionError:
             thetas = np.array([0.0, 0.0, 0.0])
-
-
         #assert abs(rho - norm) < 1e-3, "The magnitudes of the modes are not"+\
         #        "the same as what is expected. The expected norm is" + str(rho) + \
          #       " and the calculated norm is " + str(norm)
@@ -263,25 +271,4 @@ class StructureInterp:
         #assert abs(thetas[0] - theta) > 1e-3, "The angles are not the same "+\
                 #"The expected angle is {.1f} and the calculated angle is {.1f}." % \
                 #(theta, thetas[0])
-
         return modevalues, rho, theta, norm, thetas
-
-if __name__ == "__main__":
-
-    itp = StructureInterp('La2MgO4_HTT.cif', 'La2MgO4_LTO.cif', \
-            'La2MgO4_LTT.cif', 56, silent=True)
-    from glob import glob
-    mode = 'X3+'
-    fname = str(sys.argv[1])
-
-    seed = fname.split(".cif")[0]
-    print(seed)
-    modevalues, rho, theta, realrho, realthetas = itp.check_mode_vector(fname, mode)
-    print("The computed magnitude and angle are: ", realrho, realthetas)
-    newseed = "interpolated_%.3f_%.1f" % (realrho, realthetas[0])
-    for ext in ["castep", "cell", "cif"]:
-        oldf = seed + ".%s" % ext
-        newf = newseed + ".%s" % ext
-        os.rename(oldf, newf)
-
-

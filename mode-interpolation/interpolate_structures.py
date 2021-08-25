@@ -128,7 +128,8 @@ class StructureInterp:
         return list(rho * ((v1 / la.norm(v1)) * np.cos(2 * theta) +
                     (v2 / la.norm(v2)) * np.sin(2 * theta)))
 
-    def get_interp_modevalues(self, mode, num_points=10, pc=10):
+    def get_interp_modevalues(self, mode, num_points=10, pc=10,
+                              starting_structure=0):
         """
         This function gets interpolated mode values by first creating a 2D grid
         of xy-points homogeneously sampling an eigth of the plane (0-45 degrees)
@@ -184,7 +185,7 @@ class StructureInterp:
         self.interpList = {}
         for key, values in self.cart2polar.items():
             (rho, theta) = values
-            self.interpList[key] = deepcopy(self.modeValues[1])
+            self.interpList[key] = deepcopy(self.modeValues[starting_structure])
             self.interpList[key][mode] = self.interp_mode_vector(mode, rho,
                                                                  theta)
         return None

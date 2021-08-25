@@ -5,17 +5,19 @@ as a function of order parameter angle.
 """
 from matplotlib import cm
 import numpy as np
-import readmixcastep as rc
 import matplotlib.pyplot as plt
-from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, \
-        AutoMinorLocator, LinearLocator)
+from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
+                               AutoMinorLocator, LinearLocator)
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.tri as tri
 import os
+import re
+from glob import glob
+from ase.io import read
 
-plt.rcParams['font.size']=14
-plt.rcParams['xtick.labelsize']=12
-plt.rcParams['ytick.labelsize']=12
+plt.rcParams['font.size'] = 14
+plt.rcParams['xtick.labelsize'] = 12
+plt.rcParams['ytick.labelsize'] = 12
 
 class ModeLandscape:
     """
@@ -28,27 +30,28 @@ class ModeLandscape:
         self.wd = os.getcwd()
         self.minE = None
         self.httE = None
-        self.cartEnergies = {}
 
-    def extract_energies(self, rhocut=1.8, verbose=False):
+    def extract_energies(self, verbose=False):
 
-        #Change directory
-        files = [file for file in os.listdir(self.dirs[0]) if "castep" \
-        in file]
-
-        #Extract energies
+        # Change directory
+        files = glob("*.scf.out")
+        # Extract energies
         for fname in files:
-            rho, theta = float(fname.split("_")[1]),\
-                        (np.pi / 180) * float(fname.split("_")[-1].\
-                        strip(".castep"))
-            cas = rc.readcas(fname)
-            if rho <= rhocut:
-                self.energies[(rho, theta)] = 1e3*cas.get_energy()/cas.get_Nions()
+            Atoms = read(fname)
+            energy = Atoms.get_potential_energy() / \
+                    Atoms.get_global_number_of_atoms()
+            coord_string = re.search('interpolated_(.*).scf.out',
+                                     fname).group(1).split("_")
+            x, y = float(coord_string[0]), float(coord_string[1])
+            self.energies[(x, y)] = energy
 
         #Get minimum
         self.httE = self.energies[(0.000, 0.0)]
         for key in self.energies:
             self.energies[key] -= self.httE
+            self.energies[key] *= 1e3
+
+        self.minE = min(list(self.energies.values()))
 
         if verbose:
             return self.energies
@@ -65,47 +68,52 @@ class ModeLandscape:
         """
 
         symmetry_energies = {}
-        for (rho, theta) in self.energies:
-            energy = self.energies[(rho, theta)]
+        for (x, y) in self.energies:
+            energy = self.energies[(x, y)]
+            try:
+                theta = np.arctan(y/x)
+            except ZeroDivisionError:
+                theta = 0
+            rho = np.sqrt(x**2 + y**2)
             phis = [np.pi / 2 -theta, np.pi / 2 + theta, np.pi - theta, \
                     np.pi + theta, 3*np.pi/2 -theta, 3*np.pi / 2 + theta,\
                     2*np.pi - theta]
             for phi in phis:
-                symmetry_energies[(rho, phi)] = energy
+                a, b = rho*np.cos(phi), rho*np.sin(phi)
+                symmetry_energies[(a, b)] = energy
 
         self.energies.update(symmetry_energies)
 
-    def polar2cartesian(self):
+    def data_arrays(self):
+
         x = []
         y = []
         z = []
-        for (rho, theta) in self.energies:
-            self.cartEnergies[(rho*np.cos(theta), rho*np.sin(theta))] =\
-            self.energies[(rho, theta)]
+        for (xs,ys) in self.energies:
+            x.append(xs)
+            y.append(ys)
+            z.append(self.energies[(xs,ys)])
 
-            x.append(rho*np.cos(theta))
-            y.append(rho*np.sin(theta))
-            z.append(self.energies[(rho, theta)])
         return x,y,z
 
     def plot_mexican_hat(self):
 
-        x,y,z = self.polar2cartesian()
-        fig = plt.figure()
+        x, y, z = self.data_arrays()
         ax = plt.axes(projection='3d')
-        ax.set_zlim(-20,0)
-        ax.set_xlim(-2, 2)
-        ax.set_ylim(-2,2)
+        ax.set_zlim(self.minE*1.1, 0)
+        xylim = max(x)
+        ax.set_xlim(-xylim, xylim)
+        ax.set_ylim(-xylim, xylim)
 
-        ax.plot_trisurf(x, y, z, cmap='viridis', edgecolor='none');
+        ax.plot_trisurf(x, y, z, cmap='viridis', edgecolor='none')
         plt.savefig("energy_landscape.pdf")
 
-    def plot_contour(self, rhocut=1.8):
+    def plot_contour(self):
 
         npts = 200
         ngridx = 100
         ngridy = 100
-        x,y,z = self.polar2cartesian()
+        x,y,z = self.data_arrays()
 
         fig, ax1 = plt.subplots(nrows=1)
 
@@ -114,6 +122,7 @@ class ModeLandscape:
         # -----------------------
         # A contour plot of irregularly spaced data coordinates
         # via interpolation on a grid.
+        rhocut = max(x)* 1.1
 
         # Create grid values first.
         xi = np.linspace(-rhocut, rhocut, ngridx)

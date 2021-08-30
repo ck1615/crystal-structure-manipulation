@@ -100,7 +100,9 @@ class StructureInterp:
                 print("Reading end-member mode values from .npy file.")
 
             self.modeValues = list(np.load('modevals_dict.npy', allow_pickle=
-                                           "TRUE"))
+                                           "TRUlist(np.load('modevals_dict.npy', allow_pickle=
+  103                                            "TRUE"))
+  104         else:E"))
         else:
             # Initialise Isodistort instance with HTT
             iso = isodistort(self.HS, silent=self.silent)
@@ -128,7 +130,7 @@ class StructureInterp:
         return list(rho * ((v1 / la.norm(v1)) * np.cos(2 * theta) +
                     (v2 / la.norm(v2)) * np.sin(2 * theta)))
 
-    def get_interp_modevalues(self, mode, num_points=10, pc=10,
+    def get_interp_modevalues(self, mode, step=0.1, pc=50,
                               starting_structure=0):
         """
         This function gets interpolated mode values by first creating a 2D grid
@@ -164,7 +166,7 @@ class StructureInterp:
         rho_max = max(rho_lto, rho_ltt) * (1 + pc / 100)
 
         # Define grid to sample 2D energy landscape
-        points = np.linspace(0, rho_max, num_points)
+        points = np.arange(0, rho_max, step)
         xy = [(xval, yval) for yval in points for xval in points if
               (yval <= xval)]
 
@@ -198,7 +200,6 @@ class StructureInterp:
         itp.get_mode_labels()
 
         if extent == 'all':
-
             for key in self.interpList:
                 if self.verbose:
                     print(key)
@@ -211,14 +212,15 @@ class StructureInterp:
                     continue
 
                 assert 'subgroup_cif(1).txt' not in os.listdir('.'),\
-                    "New structure 'subgroup_cif.txt' downloaded" + \
-                    " before previous one was converted."
+                    "New structure 'subgroup_cif.txt' downloaded " + \
+                    "before previous one was converted."
 
                 # Set the mode values for this interpolation
                 # Iterate over interpolation entries
                 itp.modevalues = self.interpList[key]
                 itp.set_amplitudes()
                 itp.save_cif(fname=fname)
+
         elif extent in self.interpList:
             key = extent
             if self.verbose:
@@ -231,6 +233,7 @@ class StructureInterp:
             fname = "La2MgO4_interpolated_{:1.3f}_{:1.3f}.cif".\
                     format(key[0], key[1])
             itp.save_cif(fname=fname)
+
 
         # Close ISODISTORT page instance.
         time.sleep(2)

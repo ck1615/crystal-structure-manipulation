@@ -5,6 +5,7 @@ as a function of order parameter angle.
 """
 from matplotlib import cm
 import numpy as np
+from numpy.linalg import norm
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator, LinearLocator)
@@ -31,14 +32,14 @@ class ModeLandscape:
         self.minE = None
         self.httE = None
 
-    def extract_energies(self, verbose=False):
+    def extract_energies(self, verbose=False, threshold=100):
 
         # Change directory
         files = glob("*.scf.out")
         # Extract energies
         for fname in files:
             Atoms = read(fname)
-            energy = Atoms.get_potential_energy() / \
+            energy = 7 * Atoms.get_potential_energy() / \
                     Atoms.get_global_number_of_atoms()
             coord_string = re.search('interpolated_(.*).scf.out',
                                      fname).group(1).split("_")
@@ -51,7 +52,15 @@ class ModeLandscape:
             self.energies[key] -= self.httE
             self.energies[key] *= 1e3
 
+        for key in self.energies:
+            if self.energies[key] > threshold:
+                self.energies.pop(key)
+
         self.minE = min(list(self.energies.values()))
+
+        # Get LTT and LTO coordinates
+        self.original_points = list(np.load("../../CIFs/modevals_dict.npy",
+            allow_pickle="TRUE"))
 
         if verbose:
             return self.energies
@@ -89,7 +98,7 @@ class ModeLandscape:
         x = []
         y = []
         z = []
-        for (xs,ys) in self.energies:
+        for (xs, ys) in self.energies:
             x.append(xs)
             y.append(ys)
             z.append(self.energies[(xs,ys)])
@@ -108,7 +117,24 @@ class ModeLandscape:
         ax.plot_trisurf(x, y, z, cmap='viridis', edgecolor='none')
         plt.savefig("energy_landscape.pdf")
 
-    def plot_contour(self):
+    def plot_contour(self, mode="X", levels=40, cmap='binary'):
+
+
+        #Get original data
+        if mode == "X":
+            lto_norm = round(norm(self.original_points[0]['X3+']), 3)
+            ltt_norm = round(norm(self.original_points[1]['X3+']) / np.sqrt(2),
+                             3)
+        elif mode == "G":
+            lto_norm = round(norm(self.original_points[0]['GM1+']), 3)
+            ltt_norm = round(norm(self.original_points[1]['GM1+']) /
+                             np.sqrt(2), 3)
+
+        # Define cartesian coordinates for the LTO and LTT coordinates in the
+        # reduced energy landscape
+        lto_keys = [(lto_norm, 0), (0, lto_norm), (-lto_norm, 0), (0, -lto_norm)]
+        ltt_keys = [(ltt_norm, ltt_norm), (-ltt_norm, -ltt_norm), (-ltt_norm,\
+                ltt_norm), (ltt_norm, -ltt_norm)]
 
         npts = 200
         ngridx = 100
@@ -116,13 +142,12 @@ class ModeLandscape:
         x,y,z = self.data_arrays()
 
         fig, ax1 = plt.subplots(nrows=1)
-
         # -----------------------
         # Interpolation on a grid
         # -----------------------
         # A contour plot of irregularly spaced data coordinates
         # via interpolation on a grid.
-        rhocut = max(x)* 1.1
+        rhocut = max(x) * 1.01
 
         # Create grid values first.
         xi = np.linspace(-rhocut, rhocut, ngridx)
@@ -134,20 +159,44 @@ class ModeLandscape:
         Xi, Yi = np.meshgrid(xi, yi)
         zi = interpolator(Xi, Yi)
 
-        # Note that scipy.interpolate provides means to interpolate data on a grid
-        # as well. The following would be an alternative to the four lines above:
-        #from scipy.interpolate import griddata
-        #zi = griddata((x, y), z, (xi[None,:], yi[:,None]), method='linear')
+        # Define the contour plot
+        ax1.contour(xi, yi, zi, levels=levels, linewidths=0.5, colors='k')
+        cntr1 = ax1.contourf(xi, yi, zi, levels=levels, cmap=cmap, vmin=-100,
+                             vmax=600, extend='neither', alpha=0.5)
 
-        ax1.contour(xi, yi, zi, levels=14, linewidths=0.5, colors='k')
-        cntr1 = ax1.contourf(xi, yi, zi, levels=14, cmap="RdBu_r")
-
-        fig.colorbar(cntr1, ax=ax1)
+        fig.colorbar(cntr1, ax=ax1, label=r"$E - E_{\mathrm{HTT}}$ / meV/(f.u.)")
         ax1.set_xticks(np.arange(-1.5, 2, step=0.5))
-        ax1.plot(x, y, 'ko', ms=3)
+
+        # Plot raw data points
+        ax1.plot(x, y, 'ko', ms=0.4)
+        # Plot x = 0, y = 0, y = x and y = -x axes
+        ax1.plot(x, np.zeros(len(x)), 'k', linewidth=0.2)
+        ax1.plot(np.zeros(len(y)), y, 'k', linewidth=0.2)
+        ax1.plot(x, x, 'k', linewidth=0.2)
+        ax1.plot(x, -np.array(x), 'k', linewidth=0.2)
+
+        # Plot positions of LTO phase
+        for lto_key in lto_keys:
+            ax1.scatter(lto_key[0], lto_key[1], marker='x', color='r',
+                        s=10)
+            ax1.text(lto_key[0] + 0.05, lto_key[1], 'LTO', fontsize=10)
+        for ltt_key in ltt_keys:
+            ax1.scatter(ltt_key[0], ltt_key[1], marker='x', color='r',
+                        s=10)
+            ax1.text(ltt_key[0] + 0.05, ltt_key[1], 'LTT', fontsize=10)
+
+
+        # Set axes limits
         ax1.set(xlim=(-rhocut, rhocut), ylim=(-rhocut, rhocut))
-        ax1.set_xlabel(r"$|X_{3}^{+}|\cdot\cos(\theta)$")
-        ax1.set_ylabel(r"$|X_{3}^{+}|\cdot\sin(\theta)$")
+
+        # Set axis labels
+        if mode =="X":
+            ax1.set_xlabel(r"$|X_{I4/mmm}^{3+}|\cdot\cos(\theta)$")
+            ax1.set_ylabel(r"$|X_{I4/mmm}^{3+}|\cdot\sin(\theta)$")
+        elif mode == "G":
+            ax1.set_xlabel(r"$|\Gamma_{Pccn}^{1+}|\cdot\cos(\theta)$")
+            ax1.set_ylabel(r"$|\Gamma_{Pccn}^{1+}|\cdot\sin(\theta)$")
+
 
         plt.tight_layout()
         fig.savefig(self.wd + "/contour.pdf")
@@ -179,7 +228,7 @@ class ModeLandscape:
         fig, ax = plt.subplots()
         #Axis labels
         ax.set_xlabel("Order parameter angle between LTO and LTT / $^{\circ}$")
-        ax.set_ylabel("$E_{LTT} - E_{HTT}$ / meV/atom")
+        ax.set_ylabel("$E_{LTT} - E_{HTT}$ / meV/(f.u.)")
         ax.set_xticks(np.arange(0,46.5,1.5),minor=True)
         ax.set_xticks(np.arange(0,46,3))
         #Data definition and plotting

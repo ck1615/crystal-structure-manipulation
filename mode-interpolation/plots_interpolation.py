@@ -15,6 +15,7 @@ import os
 import re
 from glob import glob
 from ase.io import read
+from copy import deepcopy
 
 plt.rcParams['font.size'] = 14
 plt.rcParams['xtick.labelsize'] = 12
@@ -25,17 +26,18 @@ class ModeLandscape:
     This class plots the mode interpolation values
     """
 
-    def __init__(self):
-        self.dirs = ['./']
+    def __init__(self, direc='.'):
+        self.direc = direc
         self.energies = {}
+        self.minimal_energies = {}
         self.wd = os.getcwd()
         self.minE = None
         self.httE = None
 
-    def extract_energies(self, verbose=False, threshold=100):
+    def extract_energies(self, verbose=False):
 
         # Change directory
-        files = glob("*.scf.out")
+        files = glob("{}/*.scf.out".format(self.direc))
         # Extract energies
         for fname in files:
             Atoms = read(fname)
@@ -47,20 +49,20 @@ class ModeLandscape:
             self.energies[(x, y)] = energy
 
         #Get minimum
-        self.httE = self.energies[(0.000, 0.0)]
+        self.httE = self.energies[(0.000, 0.000)]
         for key in self.energies:
             self.energies[key] -= self.httE
             self.energies[key] *= 1e3
 
-        for key in self.energies:
-            if self.energies[key] > threshold:
-                self.energies.pop(key)
-
         self.minE = min(list(self.energies.values()))
 
         # Get LTT and LTO coordinates
-        self.original_points = list(np.load("../../CIFs/modevals_dict.npy",
+        self.original_points = list(np.load("{}/../../CIFs/modevals_dict.npy".
+            format(self.direc),
             allow_pickle="TRUE"))
+
+        # Copy to minimal energies
+        self.minimal_energies = deepcopy(self.energies)
 
         if verbose:
             return self.energies
@@ -117,7 +119,7 @@ class ModeLandscape:
         ax.plot_trisurf(x, y, z, cmap='viridis', edgecolor='none')
         plt.savefig("energy_landscape.pdf")
 
-    def plot_contour(self, mode="X", levels=40, cmap='binary'):
+    def plot_contour(self, mode="X", levels=40, cmap='binary', alpha=1):
 
 
         #Get original data
@@ -132,14 +134,14 @@ class ModeLandscape:
 
         # Define cartesian coordinates for the LTO and LTT coordinates in the
         # reduced energy landscape
-        lto_keys = [(lto_norm, 0), (0, lto_norm), (-lto_norm, 0), (0, -lto_norm)]
-        ltt_keys = [(ltt_norm, ltt_norm), (-ltt_norm, -ltt_norm), (-ltt_norm,\
-                ltt_norm), (ltt_norm, -ltt_norm)]
+        lto_keys = [(lto_norm, 0), (0, lto_norm), (-lto_norm, 0), (0, -lto_norm
+                                                                   )]
+        ltt_keys = [(ltt_norm, ltt_norm), (-ltt_norm, -ltt_norm), (-ltt_norm,
+                    ltt_norm), (ltt_norm, -ltt_norm)]
 
-        npts = 200
         ngridx = 100
         ngridy = 100
-        x,y,z = self.data_arrays()
+        x, y, z = self.data_arrays()
 
         fig, ax1 = plt.subplots(nrows=1)
         # -----------------------
@@ -147,6 +149,7 @@ class ModeLandscape:
         # -----------------------
         # A contour plot of irregularly spaced data coordinates
         # via interpolation on a grid.
+        # Set maximum x and y value to plot [use max(x) and increase by 1%]
         rhocut = max(x) * 1.01
 
         # Create grid values first.

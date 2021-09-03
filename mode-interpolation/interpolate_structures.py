@@ -100,9 +100,7 @@ class StructureInterp:
                 print("Reading end-member mode values from .npy file.")
 
             self.modeValues = list(np.load('modevals_dict.npy', allow_pickle=
-                                           "TRUlist(np.load('modevals_dict.npy', allow_pickle=
-  103                                            "TRUE"))
-  104         else:E"))
+                                           "TRUE"))
         else:
             # Initialise Isodistort instance with HTT
             iso = isodistort(self.HS, silent=self.silent)

@@ -26,13 +26,33 @@ class ModeLandscape:
     This class plots the mode interpolation values
     """
 
-    def __init__(self, direc='.'):
+    def __init__(self, mode, direc='.'):
+
+        self.mode = mode
         self.direc = direc
         self.energies = {}
         self.minimal_energies = {}
         self.wd = os.getcwd()
         self.minE = None
         self.httE = None
+
+        self.get_original_points()
+
+    def get_original_points(self):
+
+        # Get LTT and LTO coordinates
+        try:
+            self.original_points = list(np.load("{}/../../CIFs/modevals_dict.npy".
+                                        format(self.direc),
+                                        allow_pickle="TRUE"))
+        except FileNotFoundError:
+            self.original_points = list(np.load("{}/../CIFs/modevals_dict.npy".
+                                        format(self.direc),
+                                        allow_pickle="TRUE"))
+
+        # Define scalar product between LTO and LTT
+        self.alpha = np.dot(self.original_points[0][self.mode],
+                            self.original_points[1][self.mode])
 
     def extract_energies(self, verbose=False):
 
@@ -46,20 +66,23 @@ class ModeLandscape:
             coord_string = re.search('interpolated_(.*).scf.out',
                                      fname).group(1).split("_")
             x, y = float(coord_string[0]), float(coord_string[1])
-            self.energies[(x, y)] = energy
+            if x == 0:
+                theta = 0
+            else:
+                theta = np.arctan(y/x)
+            scaling_coeff = np.sqrt(1 + self.alpha * np.sin(4 * theta))
+            x *= scaling_coeff
+            y *= scaling_coeff
 
-        #Get minimum
+            self.energies[(round(x, 3), round(y, 3))] = energy
+
+        # Get minimum
         self.httE = self.energies[(0.000, 0.000)]
         for key in self.energies:
             self.energies[key] -= self.httE
             self.energies[key] *= 1e3
 
         self.minE = min(list(self.energies.values()))
-
-        # Get LTT and LTO coordinates
-        self.original_points = list(np.load("{}/../../CIFs/modevals_dict.npy".
-            format(self.direc),
-            allow_pickle="TRUE"))
 
         # Copy to minimal energies
         self.minimal_energies = deepcopy(self.energies)
@@ -119,18 +142,12 @@ class ModeLandscape:
         ax.plot_trisurf(x, y, z, cmap='viridis', edgecolor='none')
         plt.savefig("energy_landscape.pdf")
 
-    def plot_contour(self, mode="X", levels=40, cmap='binary', alpha=1):
+    def plot_contour(self, levels=40, cmap='jet', alpha=1):
 
-
-        #Get original data
-        if mode == "X":
-            lto_norm = round(norm(self.original_points[0]['X3+']), 3)
-            ltt_norm = round(norm(self.original_points[1]['X3+']) / np.sqrt(2),
-                             3)
-        elif mode == "G":
-            lto_norm = round(norm(self.original_points[0]['GM1+']), 3)
-            ltt_norm = round(norm(self.original_points[1]['GM1+']) /
-                             np.sqrt(2), 3)
+        # Get original data
+        lto_norm = round(norm(self.original_points[0][self.mode]), 3)
+        ltt_norm = round(norm(self.original_points[1][self.mode]) / np.sqrt(2),
+                         3)
 
         # Define cartesian coordinates for the LTO and LTT coordinates in the
         # reduced energy landscape
@@ -241,8 +258,6 @@ class ModeLandscape:
         ax.scatter(x,y, s=5)
         plt.tight_layout()
         plt.savefig(self.wd + "/Ediff_vs_OP.pdf")
-
-
 
 if __name__ == "__main__":
 

@@ -129,7 +129,8 @@ class StructureInterp:
                     (v2 / la.norm(v2)) * np.sin(2 * theta)))
 
     def get_interp_modevalues(self, mode, step=0.1, pc=50,
-                              starting_structure=0):
+                              starting_structure=0, point_bounds=None,
+                              add_original=True):
         """
         This function gets interpolated mode values by first creating a 2D grid
         of xy-points homogeneously sampling an eigth of the plane (0-45 degrees)
@@ -164,13 +165,20 @@ class StructureInterp:
         rho_max = max(rho_lto, rho_ltt) * (1 + pc / 100)
 
         # Define grid to sample 2D energy landscape
-        points = np.arange(0, rho_max, step)
-        xy = [(xval, yval) for yval in points for xval in points if
-              (yval <= xval)]
+        if point_bounds is None:
+            points = np.arange(0, rho_max, step)
+            xy = [(round(xval, 3), round(yval, 3)) for yval in points for xval
+                  in points if (yval <= xval)]
+        else:
+            xmin, xmax, ymin, ymax = point_bounds
+            xy = [(xval, yval) for yval in np.arange(ymin, ymax + 1e-5, step)
+                  for xval in np.arange(xmin, xmax + 1e-5, step) if
+                  (yval <= xval)]
 
         # Add the LTT and LTO relaxed structures to the list
-        xy.append((x_lto, y_lto))
-        xy.append((x_ltt, y_ltt))
+        if add_original:
+            xy.append((x_lto, y_lto))
+            xy.append((x_ltt, y_ltt))
 
         # Convert grid to polar coordinates
         self.cart2polar = {
@@ -185,7 +193,8 @@ class StructureInterp:
         self.interpList = {}
         for key, values in self.cart2polar.items():
             (rho, theta) = values
-            self.interpList[key] = deepcopy(self.modeValues[starting_structure])
+            self.interpList[key] = deepcopy(self.modeValues[starting_structure]
+                                            )
             self.interpList[key][mode] = self.interp_mode_vector(mode, rho,
                                                                  theta)
         return None

@@ -37,6 +37,7 @@ class ModeLandscape:
         self.httE = None
 
         self.get_original_points()
+        print("Dot product is: {}".format(self.alpha))
 
     def get_original_points(self):
 
@@ -71,13 +72,17 @@ class ModeLandscape:
             else:
                 theta = np.arctan(y/x)
             scaling_coeff = np.sqrt(1 + self.alpha * np.sin(4 * theta))
-            x *= scaling_coeff
-            y *= scaling_coeff
+            print(x,y)
+            if abs(scaling_coeff - 1) > 1e-5:
+                x *= scaling_coeff
+                y *= scaling_coeff
+            print(x,y)
+            print('\n')
 
-            self.energies[(round(x, 3), round(y, 3))] = energy
+            self.energies[(round(x, 3), round(y, 3), theta)] = energy
 
         # Get minimum
-        self.httE = self.energies[(0.000, 0.000)]
+        self.httE = self.energies[(0.000, 0.000, 0.0)]
         for key in self.energies:
             self.energies[key] -= self.httE
             self.energies[key] *= 1e3
@@ -102,19 +107,16 @@ class ModeLandscape:
         """
 
         symmetry_energies = {}
-        for (x, y) in self.energies:
-            energy = self.energies[(x, y)]
-            try:
-                theta = np.arctan(y/x)
-            except ZeroDivisionError:
-                theta = 0
+        for (x, y, theta) in self.energies:
+            energy = self.energies[(x, y, theta)]
+
             rho = np.sqrt(x**2 + y**2)
-            phis = [np.pi / 2 -theta, np.pi / 2 + theta, np.pi - theta, \
-                    np.pi + theta, 3*np.pi/2 -theta, 3*np.pi / 2 + theta,\
+            phis = [np.pi / 2 - theta, np.pi / 2 + theta, np.pi - theta,
+                    np.pi + theta, 3*np.pi/2 - theta, 3*np.pi / 2 + theta,
                     2*np.pi - theta]
             for phi in phis:
-                a, b = rho*np.cos(phi), rho*np.sin(phi)
-                symmetry_energies[(a, b)] = energy
+                a, b = round(rho*np.cos(phi), 3), round(rho*np.sin(phi), 3)
+                symmetry_energies[(a, b, phi)] = energy
 
         self.energies.update(symmetry_energies)
 
@@ -123,12 +125,12 @@ class ModeLandscape:
         x = []
         y = []
         z = []
-        for (xs, ys) in self.energies:
+        for (xs, ys, theta) in self.energies:
             x.append(xs)
             y.append(ys)
-            z.append(self.energies[(xs,ys)])
+            z.append(self.energies[(xs, ys, theta)])
 
-        return x,y,z
+        return x, y, z
 
     def plot_mexican_hat(self):
 

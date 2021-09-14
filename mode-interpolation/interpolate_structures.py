@@ -156,6 +156,11 @@ class StructureInterp:
         # Get data for LTT and LTO structures
         v_lto = np.array(self.modeValues[0][mode])
         v_ltt = np.array(self.modeValues[1][mode])
+
+        # Define the scalar product between the LTO and LTO mode vectors
+        self.alpha = np.dot(v_lto, v_ltt)
+
+        # Define the norm of the LTO and LTT structures
         rho_lto = la.norm(v_lto)
         rho_ltt = la.norm(v_ltt)
         x_lto, y_lto = rho_lto, 0.0
@@ -182,8 +187,11 @@ class StructureInterp:
 
         # Convert grid to polar coordinates
         self.cart2polar = {
-                xy_vals: (np.sqrt(xy_vals[0]**2 + xy_vals[1]**2),
-                          np.arctan(xy_vals[1] / xy_vals[0]))
+                xy_vals: (
+                    np.sqrt((xy_vals[0]**2 + xy_vals[1]**2) * 
+                            (1 + self.alpha * np.sin(4 *
+                             np.arctan(xy_vals[1] / xy_vals[0])))),
+                    np.arctan(xy_vals[1] / xy_vals[0]))
                 if (xy_vals[0] != 0) else
                 (np.sqrt(xy_vals[0]**2 + xy_vals[1]**2), 0.0)
                 for xy_vals in xy

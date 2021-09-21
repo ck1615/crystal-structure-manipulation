@@ -139,8 +139,10 @@ class StructureInterp:
 
         x_max = max(rho_lto, rho_ltt)
 
-        Each pair (x,y) is converted into a pair (ρ, θ) via the equations:
+        Each pair (x,y) is converted into a pair (|M|, θ) via the equations:
             ρ = sqrt(x² + y²)
+            |M| = ρ*sqrt(1 + α sin(4θ))
+            α = M_LTO.dot(M_LTT)
             θ = atan(y/x)
         Conversely, we have:
             x = ρ cos(θ)
@@ -186,9 +188,12 @@ class StructureInterp:
             xy.append((x_ltt, y_ltt))
 
         # Convert grid to polar coordinates
+        # The polar coordinates are (|M|, θ) since the basis is not orthogonal
+        # |M| = sqrt((x² + y²)*(1 + α sin(4θ)))
+        # Getting ρ: ρ = sqrt((x² + y²) / (1 + α.sin(4θ)))
         self.cart2polar = {
                 xy_vals: (
-                    np.sqrt((xy_vals[0]**2 + xy_vals[1]**2) * 
+                    np.sqrt((xy_vals[0]**2 + xy_vals[1]**2) /
                             (1 + self.alpha * np.sin(4 *
                              np.arctan(xy_vals[1] / xy_vals[0])))),
                     np.arctan(xy_vals[1] / xy_vals[0]))
@@ -291,3 +296,5 @@ class StructureInterp:
                 #"The expected angle is {.1f} and the calculated angle is {.1f}." % \
                 #(theta, thetas[0])
         return modevalues, rho, theta, norm, thetas
+
+

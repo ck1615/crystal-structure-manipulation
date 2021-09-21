@@ -26,7 +26,7 @@ class ModeLandscape:
     This class plots the mode interpolation values
     """
 
-    def __init__(self, mode, direc='.'):
+    def __init__(self, mode, direc='.', verbose=False):
 
         self.mode = mode
         self.direc = direc
@@ -35,19 +35,20 @@ class ModeLandscape:
         self.wd = os.getcwd()
         self.minE = None
         self.httE = None
+        self.verbose = verbose
+        self.original2weighted_coordinates = {}
 
         self.get_original_points()
-        print("Dot product is: {}".format(self.alpha))
 
     def get_original_points(self):
 
         # Get LTT and LTO coordinates
         try:
-            self.original_points = list(np.load("{}/../../CIFs/modevals_dict.npy".
+            self.original_points = list(np.load("{}/../CIFs/modevals_dict.npy".
                                         format(self.direc),
                                         allow_pickle="TRUE"))
         except FileNotFoundError:
-            self.original_points = list(np.load("{}/../CIFs/modevals_dict.npy".
+            self.original_points = list(np.load("{}/CIFs/modevals_dict.npy".
                                         format(self.direc),
                                         allow_pickle="TRUE"))
 
@@ -58,32 +59,42 @@ class ModeLandscape:
     def extract_energies(self, verbose=False):
 
         # Change directory
-        files = glob("{}/*.scf.out".format(self.direc))
+        files = glob("{}/EvenSampling/*.scf.out".format(self.direc))
         # Extract energies
         for fname in files:
             Atoms = read(fname)
             energy = 7 * Atoms.get_potential_energy() / \
-                    Atoms.get_global_number_of_atoms()
+                Atoms.get_global_number_of_atoms()
             coord_string = re.search('interpolated_(.*).scf.out',
                                      fname).group(1).split("_")
             x, y = float(coord_string[0]), float(coord_string[1])
+
+            # Define the angle
             if x == 0:
                 theta = 0
             else:
                 theta = np.arctan(y/x)
-            scaling_coeff = np.sqrt(1 + self.alpha * np.sin(4 * theta))
-            print(x,y)
-            if abs(scaling_coeff - 1) > 1e-5:
-                x *= scaling_coeff
-                y *= scaling_coeff
-            print(x,y)
-            print('\n')
+
+            # Define the scaling coefficient (angle dependent)
+            # Does not change angle of new coefficients
+            # Arises due to non-orthogonality of basis (M_LTO and M_LTT)
+            #scaling_coeff = 1
+            #scaling_coeff = np.sqrt(1 + self.alpha * np.sin(4 * theta))
+
+            #if abs(scaling_coeff - 1) > 1e-5:
+            #    self.original2weighted_coordinates[(x, y)] = \
+            #        (round(x * scaling_coeff, 3), round(y * scaling_coeff, 3))
+            #    x *= scaling_coeff
+            #    y *= scaling_coeff
+            #else:
+            #    self.original2weighted_coordinates[(x, y)] = (x, y)
 
             self.energies[(round(x, 3), round(y, 3), theta)] = energy
 
         # Get minimum
         self.httE = self.energies[(0.000, 0.000, 0.0)]
         for key in self.energies:
+            # Shift by HTT energy and scale to meV (hence factor of 1e3)
             self.energies[key] -= self.httE
             self.energies[key] *= 1e3
 

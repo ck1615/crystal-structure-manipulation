@@ -23,6 +23,7 @@ plt.rcParams['font.size'] = 14
 plt.rcParams['xtick.labelsize'] = 12
 plt.rcParams['ytick.labelsize'] = 12
 plt.rcParams["image.aspect"] = 'equal'
+plt.rcParams['contour.linewidth'] = 0.5
 
 class ModeLandscape:
     """
@@ -30,10 +31,13 @@ class ModeLandscape:
     """
 
     def __init__(self, u=4, modelist= ['X3+_LTO', 'X3+_LTT'], verbose=False, savefig=True, figsize=10,
-                 emin=-65, emax=25, npoints=10, coordmax=1, section='quadrant', fontsize=10):
+                 npoints=40, coordmax=0.75, section='quadrant', fontsize=10):
 
         self.section = section
         self.modeList = modelist
+        self.maindirec =  '/Users/christopherkeegan/OneDrive - Imperial College '+ \
+            'London/Documents/PhD_Research/phd-project/Calculations/LBMAO/' + \
+            'ModeInterp/q-e/LaU_{}.0'.format(u)
         self.direcs = {
             key:
             '/Users/christopherkeegan/OneDrive - Imperial College London/Documents/PhD_Research/' + 
@@ -45,21 +49,17 @@ class ModeLandscape:
 
         # Plot paramters
         self.grid_points = 100
-        self.emin = emin
-        self.emax = emax
         self.npoints = npoints
         self.cmap = 'jet'
         self.coordmax = coordmax
         self.savefig = savefig
         self.datapoints_linewidth = 0.2
-        self.contour_levels_lw = 0.5
         self.fontsize = fontsize
+        self.figsize = figsize
 
         # Data
         self.energies = {mode: {} for mode in self.modeList}
-        self.minimal_energies = {mode: {} for mode in self.modeList}
         self.data = {mode: None for mode in self.modeList}
-        self.wd = os.getcwd()
         self.minE = {mode: None for mode in self.modeList}
         self.httE = {mode: None for mode in self.modeList}
         self.verbose = verbose
@@ -75,19 +75,12 @@ class ModeLandscape:
                     allow_pickle="TRUE"))
                                 for mode in self.modeList}
 
-        # Define scalar product between LTO and LTT
-        self.alphas = {mode: 
-                       np.dot(self.original_points[mode][0][self.modeType[i]], 
-                              self.original_points[mode][1][self.modeType[i]])
-                              for i, mode in enumerate(self.modeList)
-        }
-
     def extract_energies(self, mode, verbose=False, uneven=False, scaling=False):
 
         # Get output file locations
-        files = glob("{}/EvenSampling/*.scf.out".format(self.direc[mode]))
+        files = glob("{}/EvenSampling/*.scf.out".format(self.direcs[mode]))
         if uneven:
-            files += glob("{}/UnevenSampling/*.scf.out".format(self.direc[mode]))
+            files += glob("{}/UnevenSampling/*.scf.out".format(self.direcs[mode]))
 
         # Extract energies
         for fname in files:
@@ -123,15 +116,15 @@ class ModeLandscape:
 
         # Get minimum
         self.httE[mode] = self.energies[mode][(0.000, 0.000, 0.0)]
-        for key in self.energies:
+        for key in self.energies[mode]:
             # Shift by HTT energy and scale to meV (hence factor of 1e3)
             self.energies[mode][key] -= self.httE[mode]
             self.energies[mode][key] *= 1e3
 
         self.minE[mode] = min(list(self.energies[mode].values()))
 
-        # Copy to minimal energies
-        self.minimal_energies = deepcopy(self.energies)
+        # Generate equivalent data-points by symmetry
+        self.symmetry_generate(mode)
 
         if verbose:
             return self.energies
@@ -174,14 +167,13 @@ class ModeLandscape:
         relaxed HTT, LTT, LTO and Pccn phases.
         """
         if 'GM1+' in mode:
-            lto_norm = round(norm(self.original_points[mode][0]['GM1+']),
-                             3)
-            ltt_norm = round(norm(self.original_points[mode][1]['GM1+']) /
-                             np.sqrt(2), 3)
+            lto_norm = round(norm(self.original_points[mode][0]['GM1+']), 3) / 2
+            ltt_norm = round(norm(self.original_points[mode][1]['GM1+'])
+                             / np.sqrt(2), 3) / 2
         elif 'X3+' in mode:
-            lto_norm = round(norm(self.original_points[mode][0]['X3+']), 3)
-            ltt_norm = round(norm(self.original_points[mode][1]['X3+']) /
-                             np.sqrt(2), 3)
+            lto_norm = round(norm(self.original_points[mode][0]['X3+']), 3) / 2
+            ltt_norm = round(norm(self.original_points[mode][1]['X3+'])
+                             / np.sqrt(2), 3) / 2
 
         if self.section == 'octant':
             lto_keys = [(lto_norm, 0)]
@@ -217,16 +209,24 @@ class ModeLandscape:
 
         return x, y, z
 
-    def get_data(self):
+    def get_data(self, keep_data=True):
 
-        for mode in self.modeList:
-            self.extract_energies(mode)
-            self.symmetry_generate(mode)
-            self.data[mode] = self.data_arrays(mode)
+        if 'energy_data.npy' in os.listdir(self.maindirec) and keep_data:
+            self.energies = np.load('{}/energy_data.npy'.format(self.maindirec)
+            , allow_pickle="TRUE").tolist()
+            for mode in self.modeList:
+                self.data[mode] = self.data_arrays(mode)
+        else:
+            for mode in self.modeList:
+                self.extract_energies(mode)
+                np.save('{}/energy_data.npy'.format(self.maindirec),
+                        self.energies)
+                self.data[mode] = self.data_arrays(mode)
 
         return None
 
     def get_high_symmetry_data(self):
+    
         """
         This function extracts the data along the y = 0 (LTO) and y = x (LTT)
         sections of the contour plot.
@@ -249,35 +249,46 @@ class ModeLandscape:
                         self.high_sym_data[mode]['LTT'][coord] = self.\
                             energies[mode][coords]
 
-    def plot_high_sym_data(self, ax, ymin=-80, ymax=20, xmin=0.0):
+    def set_plot_parameters(self):
+        """
+        This function returns the plot parameters for the contour
+        plots given the data.
+        """
+
+        self.emin = min([min(list(self.energies[key].values())) for key in self.energies])
+        self.emax = min(max([max(list(self.energies[key].values())) for key in self.energies]), 25)
+        self.aspect = 1e-3 * self.coordmax
+    
+    def plot_high_sym_data(self, ax, xmin=0):
         """
         This function plots as line plots the data along the y = 0 (LTO) and
         y = x (LTT) sections of the energy landscape.
         """
-         
         # Extract high-symmetry data
         self.get_high_symmetry_data() 
 
-        # Define x-values for interpolation
-        xi = np.linspace(0, self.coordmax)
-
         # Define labels
-        lto_label = r'$\theta = 0$° ($X_{3}^{+}(a, 0)$) LTO strain'
-        ltt_label = r'$\theta = 0$° ($X_{3}^{+}(a, a)$) LTT strain'
+        lto_label = r"$\theta = 0$° ($X_{3}^{+}(a, 0)$) LTO strain"
+        ltt_label = r"$\theta = 0$° ($X_{3}^{+}(a, a)$) LTT strain"
 
         # Extract LTO for LTO cell and LTT for LTT cell
         for mode in self.modeList:
             if 'X3+_LTO' in mode:
                 lto_dict = self.high_sym_data[mode]['LTO'] 
-                lto_key = self.get_phase_positions(mode)[0][0]
+                lto_key = self.get_phase_positions(mode)[0][0][0]
                 (x_lto, y_lto) = list(lto_dict.keys()), list(lto_dict.values())
                 lto_itp = interp1d(x_lto, y_lto)
             elif 'X3+_LTT' in mode:
                 ltt_dict = self.high_sym_data[mode]['LTT']
-                ltt_key = round(self.get_phase_positions(mode)[0][0] * 
-                                np.sqrt(2), 3)
+                ltt_key = self.get_phase_positions(mode)[0][0][0] * np.sqrt(2)
                 (x_ltt, y_ltt) = list(ltt_dict.keys()), list(ltt_dict.values())
                 ltt_itp = interp1d(x_ltt, y_ltt)
+
+        # Define x-values for interpolation
+        xmax = min([max(x_lto), max(x_ltt)])
+        ymin = min([min(y_ltt), min(y_lto)])
+        ymax = min([min([max(y_ltt), max(y_lto)]), 100])
+        xi = np.linspace(0, xmax)
 
         # Plot data
         ax.scatter(x_lto, y_lto, s=10, color='r', marker='x', label=lto_label)
@@ -286,34 +297,39 @@ class ModeLandscape:
         ax.plot(xi, ltt_itp(xi), color='b', linestyle='-.', linewidth=1) 
 
         # Place positions of minima
-        ax.scatter(lto_key, lto_dict[lto_key], color='k', marker='o', s=20)
-        ax.scatter(ltt_key, ltt_dict[ltt_key], color='k', marker='o', s=20)
+        #ax.scatter(lto_key, lto_dict[lto_key], color='k', marker='o', s=20)
+        #ax.scatter(ltt_key, ltt_dict[ltt_key], color='k', marker='o', s=20)
 
         # Label plot 
-        ax.set_xlabel(r'$|X_{3}^{+}| / Å', fontsize=self.fontsize)
-        ax.set_ylabel(r'$E _ E_{\mathrm{HTT}}$ / meV/(f.u.)', fontsize=self.fontsize)
+        ax.set_xlabel(r'$|X_{3}^{+}|$ / Å', fontsize=self.fontsize)
+        ax.set_ylabel(r'$E - E_{\mathrm{HTT}}$ / meV/(f.u.)', fontsize=self.fontsize)
         ax.axhline(y=0, color='k', linestyle='solid', linewidth=self.datapoints_linewidth)
 
         # Place limits
         ax.legend(loc=(0.01, 0.79))
-        ax.set_xticks(np.arange(xmin, self.coordmax + 1e-5, 0.01))
-        ax.set_xlim((xmin, self.coordmax))
-        ax.set_ylim((ymin, ymax))
+        ax.set_xticks(np.arange(xmin, xmax + 1e-5, 0.1))
+        ax.set_yticks(np.arange(round((ymin-10) / 10)  * 10, ymax + 1e-5, 20))
+        ax.set_xlim((xmin, xmax)) 
+        ax.set_ylim((round((ymin-10) / 10) * 10, ymax))
+
+        ax.set(aspect=0.45 * (xmax - xmin) / (ymax - ymin))
 
     def paper_plot(self, extent=100):
 
-        # Define plot
-        fig, axes = plt.subplots(nrows=2, ncols=2, sharex=True, sharey=True,
-                figsize=(10, 10))
+        # Set plot parameters
+        self.set_plot_parameters()
 
-        # Get names of data
-        contours = []
+        # Define plot
+        fig = plt.figure(figsize=(self.figsize, self.figsize))
+        gs = fig.add_gridspec(2,2)
+        axes = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])]
+        ax_final = fig.add_subplot(gs[1, :], adjustable='box')
 
         # Get cutoff
         axis_cut = round(self.coordmax / 0.5) * 0.5
 
-        # Create grid
-        xi = np.linspace(-self.coordmax, self.coordmax, self.grid_points)
+        # Create gridkkk
+        xi = np.linspace(0.0, self.coordmax, self.grid_points)
         Xi, Yi, = np.meshgrid(xi, xi)
 
         # Define levels
@@ -323,7 +339,7 @@ class ModeLandscape:
 
         # Plot contour plots in upper-half
         for i, mode in enumerate(self.modeList):
-            ax = axes[0, i]
+            ax = axes[i]
             x, y, z = self.data[self.modeList[i]]
 
             # Interpolate
@@ -332,8 +348,7 @@ class ModeLandscape:
             zi = interpolator(Xi, Yi)
 
             # Plot
-            ax.contour(xi, xi, zi, levels=levels,
-            linewidth=self.contour_levels_lw, colours='k')
+            ax.contour(xi, xi, zi, levels=levels, colors='k')
             cntr = ax.contourf(xi, xi, zi, levels=levels, cmap=self.cmap)
 
             # Plot raw data
@@ -351,15 +366,15 @@ class ModeLandscape:
 
             for lto_key in lto_keys:
                 ax.scatter(lto_key[0], lto_key[1], marker='x', color='r', s=10)
-                ax.text(lto_key[0] + 0.05, lto_key[1], 'LTO', fontsize=self.fontsize)
+                ax.text(lto_key[0] + 0.05, lto_key[1] + 0.05, 'LTO', fontsize=self.fontsize, color='w')
                 continue
             for ltt_key in ltt_keys:
                 ax.scatter(ltt_key[0], ltt_key[1], marker='x', color='r', s=10)
-                ax.text(ltt_key[0] + 0.05, ltt_key[1], 'LTT', fontsize=self.fontsize)
+                ax.text(ltt_key[0] + 0.05, ltt_key[1], 'LTT', fontsize=self.fontsize, color='w')
 
             # HTT
             ax.scatter(0, 0, marker='x', color='g', s=10)
-            ax.text(0 + 0.05, 0, 'HTT', fontsize=self.fontsize)
+            ax.text(0 + 0.05, 0.05, 'HTT', fontsize=self.fontsize, color='w')
 
             # Plot minima according to structure
             #if data_name == "X3+_LTO":
@@ -378,22 +393,35 @@ class ModeLandscape:
             #                       marker='x', color='k', s=15)
 
             # Ticks 
-            ax.set_xticks(np.arange(0.0, axis_cut + 0.5, 0.5))
-            ax.set_yticks(np.arange(0.0, axis_cut + 0.5, 0.5))
+            ax.set_xticks(np.arange(0.0, axis_cut + 1e-5, 0.25))
+            if i == 0:
+                ax.set_yticks(np.arange(0.0, axis_cut + 1e-5, 0.25))
+            else:
+                ax.set_yticks(np.array([]))
+                fig.colorbar(cntr, ax=axes, label=r"$E - E_{\mathrm{HTT}}$ / meV/(f.u.)",
+                        ticks=np.arange(self.emin, self.emax, 10))
+
             ax.set(adjustable='box', aspect='equal')
         
             ax.set_xlim((0, self.coordmax))
             ax.set_ylim((0, self.coordmax))
 
+
         # Plot cuts along LTO and LTT lines with LTO and LTT lattice respectively
-        self.plot_cuts(axes[1, 0])
+        self.plot_high_sym_data(ax_final)
 
         # Align bottom figure to the left
-        axes[1, 0].set_anchor((0.0, 0.0))
+        ax_final.set_anchor((0.0, 1.0))
 
-        fig.savefig('modelandscape_paper.pdf', bbox_inches='tight')
+        fig.savefig('test.pdf', bbox_inches='tight')
 
 
-def main(modelist=['X3+_LTO_GM1+_LTT', 'X3+_LTT_GM1+_LTO']):
-    MLs = ModeLandscape(u=4, modelist=modelist)
+def main(modelist=['X3+_LTO', 'X3+_LTT']):
+    MLs = ModeLandscape(u=4, modelist=modelist, coordmax=0.75)
+    MLs.get_data()
+    MLs.paper_plot()
     return None
+
+
+if __name__ == "__main__":
+   main() 

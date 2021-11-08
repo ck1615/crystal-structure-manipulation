@@ -76,10 +76,9 @@ class StructureInterp:
             iso.select_space_group()
 
             # Save CIF file and get new name
-            sfile = sfile.replace(".cif", "_" + str(self.subgroup) + ".cif")
             sfile = sfile.replace('.cif', '_{}.cif'.format(self.subgroup))
-            iso.saveCif(fname=sfile, close=True)
-            count=0
+            iso.save_cif(fname=sfile, close=True)
+            count = 0
             while sfile not in os.listdir("."):
                 time.sleep(1)
                 assert count < 10, "Printing CIF file took too long."

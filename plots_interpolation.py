@@ -19,9 +19,9 @@ from copy import deepcopy
 from scipy.interpolate import interp1d, interp2d
 
 # Set default values for matplotlib rcParams
-plt.rcParams['font.size'] = 14
-plt.rcParams['xtick.labelsize'] = 12
-plt.rcParams['ytick.labelsize'] = 12
+plt.rcParams['font.size'] = 18
+plt.rcParams['xtick.labelsize'] = 16
+plt.rcParams['ytick.labelsize'] = 16
 plt.rcParams["image.aspect"] = 'equal'
 plt.rcParams['contour.linewidth'] = 0.5
 
@@ -30,8 +30,8 @@ class ModeLandscape:
     This class plots the mode interpolation values
     """
 
-    def __init__(self, u=4, modelist= ['X3+_LTO', 'X3+_LTT'], verbose=False, savefig=True, figsize=10,
-                 npoints=40, coordmax=0.75, section='quadrant', fontsize=10,
+    def __init__(self, u=4, modelist=['X3+_LTO', 'X3+_LTT'], verbose=False, savefig=True, figsize=10,
+                 npoints=40, coordmax=0.75, section='quadrant',
                  figname="Mode_Landscape_Paper.pdf"):
 
         self.section = section
@@ -57,9 +57,9 @@ class ModeLandscape:
         self.coordmax = coordmax
         self.savefig = savefig
         self.datapoints_linewidth = 0.2
-        self.fontsize = fontsize
         self.figsize = figsize
         self.figname = figname
+        self.size = 18
 
         # Data
         self.energies = {mode: {} for mode in self.modeList}
@@ -262,7 +262,7 @@ class ModeLandscape:
         self.emax = min(max([max(list(self.energies[key].values())) for key in self.energies]), 25)
         self.aspect = 1e-3 * self.coordmax
 
-    def plot_high_sym_data(self, ax, xmin=0.0):
+    def plot_high_sym_data(self, ax, xmin=0.2):
         """
         This function plots as line plots the data along the y = 0 (LTO) and
         y = x (LTT) sections of the energy landscape.
@@ -295,23 +295,23 @@ class ModeLandscape:
         xi = np.linspace(0, xmax)
 
         # Plot data
-        ax.scatter(x_lto, y_lto, s=10, color='r', marker='x', label=lto_label)
-        ax.scatter(x_ltt, y_ltt, s=10, color='b', marker='o', label=ltt_label)
-        ax.plot(xi, lto_itp(xi), color='r', linestyle='--', linewidth=1)
-        ax.plot(xi, ltt_itp(xi), color='b', linestyle='-.', linewidth=1)
+        ax.scatter(x_lto, y_lto, s=self.size, color='r', marker='x', label=lto_label)
+        ax.scatter(x_ltt, y_ltt, s=self.size, color='b', marker='o', label=ltt_label)
+        ax.plot(xi, lto_itp(xi), color='r', linestyle='--', linewidth=2)
+        ax.plot(xi, ltt_itp(xi), color='b', linestyle='-.', linewidth=2)
 
         # Place positions of minima
         ax.scatter(lto_key, lto_dict[lto_key], color='k', marker='o', s=20)
         ax.scatter(ltt_key, ltt_dict[ltt_key], color='k', marker='o', s=20)
 
         # Label plot 
-        ax.set_xlabel(r'$|X_{3}^{+}|$ / Å', fontsize=self.fontsize * 1.5)
-        ax.set_ylabel(r'$E - E_{\mathrm{HTT}}$ / meV/(f.u.)',
-                      fontsize=self.fontsize * 1.5)
-        ax.axhline(y=0, color='k', linestyle='solid', linewidth=self.datapoints_linewidth)
+        ax.set_xlabel(r'$|X_{3}^{+}|$ / Å')
+        ax.set_ylabel(r'$E - E_{\mathrm{HTT}}$ / meV/(f.u.)')
+        ax.axhline(y=0, color='k', linestyle='solid',
+                   linewidth=self.datapoints_linewidth)
 
         # Place limits
-        ax.legend(loc=(0.01, 0.79))
+        ax.legend(loc=(0.01, 0.72))
         ax.set_xticks(np.arange(xmin, xmax + 1e-5, 0.1))
         ax.set_yticks(np.arange(round((ymin-10) / 10) * 10, ymax + 1e-5, 20))
         ax.set_xlim((xmin, xmax)) 
@@ -351,15 +351,15 @@ class ModeLandscape:
 
         for lto_key in lto_keys:
             ax.scatter(lto_key[0], lto_key[1], marker='x', color='r', s=10)
-            ax.text(lto_key[0] + 0.03, lto_key[1] + 0.01, 'LTO', fontsize=self.fontsize, color='w')
+            ax.text(lto_key[0] + 0.03, lto_key[1] + 0.01, 'LTO', color='w')
             continue
         for ltt_key in ltt_keys:
             ax.scatter(ltt_key[0], ltt_key[1], marker='x', color='r', s=10)
-            ax.text(ltt_key[0] + 0.03, ltt_key[1] + 0.03, 'LTT', fontsize=self.fontsize, color='w')
+            ax.text(ltt_key[0] + 0.03, ltt_key[1] + 0.03, 'LTT', color='w')
 
         # HTT
         ax.scatter(0, 0, marker='x', color='g', s=10)
-        ax.text(0 + 0.03, 0.03, 'HTT', fontsize=self.fontsize, color='w')
+        ax.text(0 + 0.03, 0.03, 'HTT', color='w')
 
         # Plot minima according to structure
         #if data_name == "X3+_LTO":
@@ -429,18 +429,15 @@ class ModeLandscape:
         ax_final.set_anchor((0.0, 1.0))
 
         # Place labels for each plot
-        axes[0].text(-self.coordmax * 0.27, self.coordmax * 1.05, "a)",
-                     fontsize=self.fontsize * 1.5)
-        axes[1].text(-self.coordmax * 0.27/2, self.coordmax * 1.05, "b)",
-                     fontsize=self.fontsize * 1.5)
-        axes[0].text(-self.coordmax * 0.27, -self.coordmax * 0.27, "c)",
-                     fontsize=self.fontsize * 1.5)
+        axes[0].text(-self.coordmax * 0.27, self.coordmax * 1.05, "a)")
+        axes[1].text(-self.coordmax * 0.27/2, self.coordmax * 1.05, "b)")
+        axes[0].text(-self.coordmax * 0.27, -self.coordmax * 0.27, "c)")
 
         fig.savefig('{}/{}'.format(self.maindirec, self.figname),
                     bbox_inches='tight')
 
 
-def main(modelist=['X3+_LTO_GM1+_LTT', 'X3+_LTT_GM1+_LTO']):
+def main(modelist=['X3+_LTO', 'X3+_LTT']):
     MLs = ModeLandscape(u=4, modelist=modelist, coordmax=0.75)
     MLs.get_data(keep_data=False)
     MLs.paper_plot()

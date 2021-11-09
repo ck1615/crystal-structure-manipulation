@@ -9,14 +9,14 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator, LinearLocator)
-#from mpl_toolkits.mplot3d import Axes3D
+# from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.tri as tri
 import os
 import re
 from glob import glob
 from ase.io import read
-#from copy import deepcopy
-from scipy.interpolate import interp1d, interp2d
+# from copy import deepcopy
+from scipy.interpolate import interp1d
 
 # Set default values for matplotlib rcParams
 plt.rcParams['font.size'] = 18
@@ -315,6 +315,11 @@ class ModeLandscape:
         ax.axhline(y=0, color='k', linestyle='solid',
                    linewidth=self.datapoints_linewidth)
 
+        # Plot vertical line at divergence point
+        #ax.arrow(0.35, -100, 0, 40) 
+        ax.annotate("", xy=(0.35, -58), xytext=(0.35, -100),
+                    arrowprops=dict(arrowstyle="->"))
+
         # Place limits
         ax.legend(loc=(0.01, 0.75))
         ax.set_xticks(np.arange(xmin, xmax + 1e-5, 0.1))
@@ -476,7 +481,7 @@ class ModeLandscape:
 
 def main():
     MLs = ModeLandscape(u=4, coordmax=0.75)
-    MLs.get_data(keep_data=False)
+    MLs.get_data(keep_data=True)
     MLs.paper_plot()
     MLs.contour_highsym_plot()
     return None

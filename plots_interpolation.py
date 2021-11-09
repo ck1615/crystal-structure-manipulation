@@ -3,19 +3,19 @@
 This module contains functions for extracting and plotting the total energy
 as a function of order parameter angle.
 """
-from matplotlib import cm
+#from matplotlib import cm
 import numpy as np
 from numpy.linalg import norm
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator, LinearLocator)
-from mpl_toolkits.mplot3d import Axes3D
+#from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.tri as tri
 import os
 import re
 from glob import glob
 from ase.io import read
-from copy import deepcopy
+#from copy import deepcopy
 from scipy.interpolate import interp1d, interp2d
 
 # Set default values for matplotlib rcParams
@@ -30,15 +30,16 @@ class ModeLandscape:
     This class plots the mode interpolation values
     """
 
-    def __init__(self, u=4, modelist=['X3+_LTO', 'X3+_LTT'], verbose=False, savefig=True, figsize=10,
-                 npoints=40, coordmax=0.75, section='quadrant',
+    def __init__(self, u=4, modelist=['X3+_LTO', 'X3+_LTT'],
+                 verbose=False, savefig=True, figsize=10, npoints=40,
+                 coordmax=0.75, section='quadrant',
                  figname="Mode_Landscape_Paper.pdf"):
 
         self.section = section
         self.modeList = modelist
         self.maindirec = '/Users/christopherkeegan/OneDrive - Imperial College '+ \
             'London/Documents/PhD_Research/phd-project/Calculations/LBMAO/' + \
-            'ModeInterp/q-e/LaU_{}.0'.format(u)
+            'ModeInterp/q-e/LaU_{}.0/'.format(u)
         self.direcs = {
             key:
             '/Users/christopherkeegan/OneDrive - Imperial College London/Documents/PhD_Research/' +
@@ -74,17 +75,20 @@ class ModeLandscape:
     def get_original_points(self):
 
         # Get LTT and LTO coordinates
-        self.original_points = {mode: 
-        list(np.load("{}/CIFs/modevals_dict.npy". format(self.direcs[mode]),
-                    allow_pickle="TRUE"))
+        self.original_points = {mode:
+                                list(np.load("{}/CIFs/modevals_dict.npy".
+                                     format(self.direcs[mode]),
+                                     allow_pickle="TRUE"))
                                 for mode in self.modeList}
 
-    def extract_energies(self, mode, verbose=False, uneven=False, scaling=False):
+    def extract_energies(self, mode, verbose=False, uneven=False,
+                         scaling=False):
 
         # Get output file locations
         files = glob("{}/EvenSampling/*.scf.out".format(self.direcs[mode]))
         if uneven:
-            files += glob("{}/UnevenSampling/*.scf.out".format(self.direcs[mode]))
+            files += glob("{}/UnevenSampling/*.scf.out".
+                          format(self.direcs[mode]))
 
         # Extract energies
         for fname in files:
@@ -242,15 +246,15 @@ class ModeLandscape:
                 # Get LTO line data
                 if coords[1] == 0:
                     self.high_sym_data[mode]['LTO'][coords[0]] = \
-                    self.energies[mode][coords]
+                        self.energies[mode][coords]
                     # If origin add to LTT data
                     if coords[0] == 0:
                         self.high_sym_data[mode]['LTT'][coords[0]] = \
                             self.energies[mode][coords]
                 elif coords[0] == coords[1]:
-                        coord = round(np.sqrt(2) * coords[0], 3)
-                        self.high_sym_data[mode]['LTT'][coord] = self.\
-                            energies[mode][coords]
+                    coord = round(np.sqrt(2) * coords[0], 3)
+                    self.high_sym_data[mode]['LTT'][coord] = self.\
+                        energies[mode][coords]
 
     def set_plot_parameters(self):
         """
@@ -259,10 +263,11 @@ class ModeLandscape:
         """
 
         self.emin = min([min(list(self.energies[key].values())) for key in self.energies])
-        self.emax = min(max([max(list(self.energies[key].values())) for key in self.energies]), 25)
+        self.emax = min(max([max(list(self.energies[key].values())) for key in
+                        self.energies]), 0)
         self.aspect = 1e-3 * self.coordmax
 
-    def plot_high_sym_data(self, ax, xmin=0.2):
+    def plot_high_sym_data(self, ax, xmin=0.0):
         """
         This function plots as line plots the data along the y = 0 (LTO) and
         y = x (LTT) sections of the energy landscape.
@@ -311,7 +316,7 @@ class ModeLandscape:
                    linewidth=self.datapoints_linewidth)
 
         # Place limits
-        ax.legend(loc=(0.01, 0.72))
+        ax.legend(loc=(0.01, 0.75))
         ax.set_xticks(np.arange(xmin, xmax + 1e-5, 0.1))
         ax.set_yticks(np.arange(round((ymin-10) / 10) * 10, ymax + 1e-5, 20))
         ax.set_xlim((xmin, xmax)) 
@@ -394,7 +399,7 @@ class ModeLandscape:
         ax.set_xlim((0, self.coordmax))
         ax.set_ylim((0, self.coordmax))
 
-    def paper_plot(self, extent=100):
+    def contour_highsym_plot(self, extent=100):
 
         # Set plot parameters
         self.set_plot_parameters()
@@ -433,14 +438,47 @@ class ModeLandscape:
         axes[1].text(-self.coordmax * 0.27/2, self.coordmax * 1.05, "b)")
         axes[0].text(-self.coordmax * 0.27, -self.coordmax * 0.27, "c)")
 
+        fig.savefig('{}/Triple_{}'.format(self.maindirec, self.figname),
+                    bbox_inches='tight')
+
+    def paper_plot(self):
+        """
+        High-symmetry line cuts (a;0) and (a;a) for a > 0.
+        """
+
+        # Set plot parameters
+        self.set_plot_parameters()
+
+        # Define plot
+        fig, ax = plt.subplots(ncols=1, nrows=1,
+                figsize=(self.figsize, self.figsize))
+
+        # Get cutoff
+        #axis_cut = round(self.coordmax / 0.5) * 0.5
+
+        # Create gridkkk
+        xi = np.linspace(0.0, self.coordmax, self.grid_points)
+        Xi, Yi, = np.meshgrid(xi, xi)
+
+        # Define levels
+        levels = np.linspace(self.emin, self.emax, self.npoints)
+        np.append(levels, 0)
+        levels = np.around(levels, decimals=0)
+
+        # Plot cuts along LTO and LTT lines with LTO and LTT lattice respectively
+        self.plot_high_sym_data(ax)
+
+        # Align bottom figure to the left
+        #ax.set_anchor((0.0, 1.0))
+        fig.tight_layout()
         fig.savefig('{}/{}'.format(self.maindirec, self.figname),
                     bbox_inches='tight')
 
-
-def main(modelist=['X3+_LTO', 'X3+_LTT']):
-    MLs = ModeLandscape(u=4, modelist=modelist, coordmax=0.75)
+def main():
+    MLs = ModeLandscape(u=4, coordmax=0.75)
     MLs.get_data(keep_data=False)
     MLs.paper_plot()
+    MLs.contour_highsym_plot()
     return None
 
 

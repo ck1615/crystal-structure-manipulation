@@ -19,9 +19,9 @@ from ase.io import read
 from scipy.interpolate import interp1d
 
 # Set default values for matplotlib rcParams
-plt.rcParams['font.size'] = 18
-plt.rcParams['xtick.labelsize'] = 16
-plt.rcParams['ytick.labelsize'] = 16
+plt.rcParams['font.size'] = 24
+plt.rcParams['xtick.labelsize'] = 24
+plt.rcParams['ytick.labelsize'] = 24
 plt.rcParams["image.aspect"] = 'equal'
 plt.rcParams['contour.linewidth'] = 0.5
 
@@ -33,18 +33,22 @@ class ModeLandscape:
     def __init__(self, u=4, modelist=['X3+_LTO', 'X3+_LTT'],
                  verbose=False, savefig=True, figsize=10, npoints=40,
                  coordmax=0.75, section='quadrant',
-                 figname="Mode_Landscape_Paper.pdf"):
+                 figname="Mode_Landscape_Paper.pdf", rumpling=False):
 
         self.section = section
         self.modeList = modelist
-        self.maindirec = '/Users/christopherkeegan/OneDrive - Imperial College '+ \
-            'London/Documents/PhD_Research/phd-project/Calculations/LBMAO/' + \
-            'ModeInterp/q-e/LaU_{}.0/'.format(u)
+        self.rumpling = rumpling
+
+        if rumpling:
+            self.maindirec = '/Users/christopherkeegan/OneDrive - Imperial College '+ \
+                'London/Documents/PhD_Research/phd-project/Calculations/LBMAO/'+\
+                'ModeInterp/q-e/LaU_{}.0/Rumpling/'.format(u)
+        else:
+            self.maindirec = '/Users/christopherkeegan/OneDrive - Imperial College '+ \
+                'London/Documents/PhD_Research/phd-project/Calculations/LBMAO/'+\
+                'ModeInterp/q-e/LaU_{}.0/'.format(u)
         self.direcs = {
-            key:
-            '/Users/christopherkeegan/OneDrive - Imperial College London/Documents/PhD_Research/' +
-            'phd-project/Calculations/LBMAO/ModeInterp/q-e/LaU_{}.0/{}'.
-            format(u, key)
+            key: '{}/{}'.format(self.maindirec, key)
             for key in self.modeList
             }
         self.modeTypes = ['X3+' if 'X3+' in mode else 'GM1+' for mode in
@@ -61,6 +65,7 @@ class ModeLandscape:
         self.figsize = figsize
         self.figname = figname
         self.size = 18
+        self.textcolour = 'w'
 
         # Data
         self.energies = {mode: {} for mode in self.modeList}
@@ -98,6 +103,9 @@ class ModeLandscape:
             coord_string = re.search('interpolated_(.*).scf.out',
                                      fname).group(1).split("_")
             x, y = float(coord_string[0]), float(coord_string[1])
+            if 'GM1+' in mode:
+                x /= 2
+                y /= 2
 
             # Define the angle
             if x == 0:
@@ -262,9 +270,14 @@ class ModeLandscape:
         plots given the data.
         """
 
-        self.emin = min([min(list(self.energies[key].values())) for key in self.energies])
-        self.emax = min(max([max(list(self.energies[key].values())) for key in
-                        self.energies]), 0)
+        if 'GM1+' in self.modeList[0]:
+            self.emin = min(list(self.energies['GM1+_56'].values()))
+            self.emax = 60.0
+        else:
+            self.emin = min([min(list(self.energies[key].values())) for key in
+                            self.energies])
+            self.emax = min(max([max(list(self.energies[key].values())) for
+                            key in self.energies]), 0)
         self.aspect = 1e-3 * self.coordmax
 
     def plot_high_sym_data(self, ax, xmin=0.0):
@@ -281,6 +294,8 @@ class ModeLandscape:
 
         # Extract LTO for LTO cell and LTT for LTT cell
         for mode in self.modeList:
+            if 'GM1+' in mode:
+                continue
             if 'X3+_LTO' in mode:
                 lto_dict = self.high_sym_data[mode]['LTO']
                 lto_key = self.get_phase_positions(mode)[0][0][0]
@@ -321,13 +336,13 @@ class ModeLandscape:
                     arrowprops=dict(arrowstyle="->"))
 
         # Place limits
-        ax.legend(loc=(0.01, 0.75))
+        ax.legend(loc=(0.01, 0.78))
         ax.set_xticks(np.arange(xmin, xmax + 1e-5, 0.1))
         ax.set_yticks(np.arange(round((ymin-10) / 10) * 10, ymax + 1e-5, 20))
         ax.set_xlim((xmin, xmax)) 
         ax.set_ylim((round((ymin-10) / 10) * 10, ymax))
 
-        ax.set(aspect=0.45 * (xmax - xmin) / (ymax - ymin))
+        #ax.set(aspect=0.45 * (xmax - xmin) / (ymax - ymin))
 
     def energy_landscape_contour(self, i, fig, axes, levels, mode, xi, Xi, Yi,
                                  axis_cut):
@@ -360,16 +375,18 @@ class ModeLandscape:
         lto_keys, ltt_keys = self.get_phase_positions(mode)
 
         for lto_key in lto_keys:
-            ax.scatter(lto_key[0], lto_key[1], marker='x', color='r', s=10)
-            ax.text(lto_key[0] + 0.03, lto_key[1] + 0.01, 'LTO', color='w')
+            ax.scatter(lto_key[0], lto_key[1], marker='x', color='r', s=20)
+            ax.text(lto_key[0] + 0.03, lto_key[1] + 0.01, 'LTO',
+                    color=self.textcolour)
             continue
         for ltt_key in ltt_keys:
-            ax.scatter(ltt_key[0], ltt_key[1], marker='x', color='r', s=10)
-            ax.text(ltt_key[0] + 0.03, ltt_key[1] + 0.03, 'LTT', color='w')
+            ax.scatter(ltt_key[0], ltt_key[1], marker='x', color='r', s=20)
+            ax.text(ltt_key[0] + 0.03, ltt_key[1] + 0.03, 'LTT',
+                    color=self.textcolour)
 
         # HTT
-        ax.scatter(0, 0, marker='x', color='g', s=10)
-        ax.text(0 + 0.03, 0.03, 'HTT', color='w')
+        ax.scatter(0, 0, marker='x', color='k', s=15)
+        ax.text(0 + 0.03, 0.03, 'HTT', color=self.textcolour)
 
         # Plot minima according to structure
         #if data_name == "X3+_LTO":
@@ -387,19 +404,50 @@ class ModeLandscape:
         #                ax.scatter((-1) ** k * (-1) ** l * point[i], (-1) ** (l + 1) * point[(i + 1) % 2], \
         #                       marker='x', color='k', s=15)
 
+        #Mode name
+        if 'GM1+' in self.modeList[i]:
+            mode_plotname = '\Gamma_{1}^{+}'
+        elif 'X3+' in self.modeList[i]:
+            mode_plotname = 'X_{3}^{+}'
+
         # Ticks
         ax.set_xticks(np.arange(0.0, axis_cut + 1e-5, 0.25))
-        if i == 0:
+        if self.rumpling:
+            if i == 2:
+                label=r"$E - E_{\mathrm{HTT}}$ / meV/(f.u.)"
+                tickspace=2
+            else:
+                label=""
+                tickspace=50
             ax.set_yticks(np.arange(0.0, axis_cut + 1e-5, 0.25))
-            ax.set_ylabel(r'$|X_{3}^{+}|\cdot\sin(\theta)$ / Å')
+            ax.set_ylabel(r'$|{}|\cdot\sin(\theta)$ / Å'.format(mode_plotname))
+            fig.colorbar(cntr, ax=axes[i], label=label,
+                         ticks=np.arange(round((self.emin - tickspace) /
+                             tickspace) * tickspace,
+                                         round((self.emax + tickspace) /
+                                             tickspace) * tickspace, tickspace))
         else:
-            ax.set_yticks(np.array([]))
-            fig.colorbar(cntr, ax=axes, label=r"$E - E_{\mathrm{HTT}}$ / meV/(f.u.)",
-                         ticks=np.arange(round((self.emin - 10) / 10) * 10,
-                                         round((self.emax + 10) / 10) * 10, 10))
+            if i == 0:
+                ax.set_yticks(np.arange(0.0, axis_cut + 1e-5, 0.25))
+                ax.set_ylabel(r'$|{}|\cdot\sin(\theta)$ / Å'.
+                        format(mode_plotname))
+                if 'GM1+' in self.modeList[0]:
+                    tickspace = 15
+                    fig.colorbar(cntr, ax=axes[i],
+                                 label=r"$E - E_{\mathrm{HTT}}$ / meV/(f.u.)",
+                                 ticks=np.arange(round((self.emin - tickspace)
+                                     / tickspace) * tickspace,
+                                     round((self.emax + tickspace) / tickspace)
+                                     * tickspace, tickspace))
+            else:
+                ax.set_yticks(np.array([]))
+                fig.colorbar(cntr, ax=axes[i], label=r"$E - E_{\mathrm{HTT}}$ / meV/(f.u.)",
+                             ticks=np.arange(round((self.emin - 10) / 10) * 10,
+                                             round((self.emax + 10) / 10) * 10, 10))
 
         ax.set(adjustable='box', aspect='equal',
-               xlabel=r'$|X_{3}^{+}|\cdot\cos(\theta)$ / Å')
+               xlabel=r'$|{}|\cdot\cos(\theta)$ / Å'.
+               format(mode_plotname))
 
         ax.set_xlim((0, self.coordmax))
         ax.set_ylim((0, self.coordmax))
@@ -455,11 +503,11 @@ class ModeLandscape:
         self.set_plot_parameters()
 
         # Define plot
-        fig, ax = plt.subplots(ncols=1, nrows=1,
-                figsize=(self.figsize, self.figsize))
+        fig, ax = plt.subplots(ncols=1, nrows=2,
+                figsize=(self.figsize, self.figsize*1.5))
 
         # Get cutoff
-        #axis_cut = round(self.coordmax / 0.5) * 0.5
+        axis_cut = round(self.coordmax / 0.5) * 0.5
 
         # Create gridkkk
         xi = np.linspace(0.0, self.coordmax, self.grid_points)
@@ -470,22 +518,73 @@ class ModeLandscape:
         np.append(levels, 0)
         levels = np.around(levels, decimals=0)
 
+        # PLot contour
+        i = 0
+        mode = self.modeList[i]
+        self.energy_landscape_contour(i, fig, ax, levels, mode, xi, Xi, Yi,
+                                      axis_cut)
         # Plot cuts along LTO and LTT lines with LTO and LTT lattice respectively
-        self.plot_high_sym_data(ax)
+        self.plot_high_sym_data(ax[1])
+
+        # Label plots a) and b)
+        ax[0].text(-self.coordmax * 0.25, self.coordmax * 0.98, "a)")
+        ax[0].text(-self.coordmax * 0.25, -self.coordmax * 0.1, "b)")
 
         # Align bottom figure to the left
-        #ax.set_anchor((0.0, 1.0))
+        ax[0].set_anchor((0.0, 1.0))
         fig.tight_layout()
         fig.savefig('{}/{}'.format(self.maindirec, self.figname),
                     bbox_inches='tight')
 
+    def rumpling_plots(self):
+        """
+        This function plots energy landscapes for various rumpling values
+        """
+        # Define plot
+        fig, axes = plt.subplots(ncols=len(self.data), nrows=1,
+                                 figsize=(self.figsize*3, self.figsize * 0.8))
+
+        # Get cutoff
+        axis_cut = round(self.coordmax / 0.5) * 0.5
+
+        # Create gridkkk
+        xi = np.linspace(0.0, self.coordmax, self.grid_points)
+        Xi, Yi, = np.meshgrid(xi, xi)
+
+        # Add contour
+        for i, mode in enumerate(self.data):
+            # Define levels
+            self.emin = min(list(self.energies[mode].values()))
+            self.emax = 0.0
+            levels = np.linspace(self.emin, self.emax, self.npoints)
+            np.append(levels, 0)
+            levels = np.around(levels, decimals=1)
+            self.energy_landscape_contour(i, fig, axes, levels, mode, xi, Xi,
+                                          Yi, axis_cut)
+            rumpling_val = mode.split('_')[-1]
+            axes[i].set_title(r'Rumpling = {} Å (LTO strain)'.
+                              format(rumpling_val))
+
+        fig.savefig("rumpling_energy_landscapes.pdf", bbox_inches='tight')
+
+
 def main():
-    MLs = ModeLandscape(u=4, coordmax=0.75)
+    MLs = ModeLandscape(u=4, modelist=['GM1+_56', 'X3+_LTO', 'X3+_LTT'],
+            coordmax=0.75)
     MLs.get_data(keep_data=True)
     MLs.paper_plot()
-    MLs.contour_highsym_plot()
+    #MLs.contour_highsym_plot()
     return None
+
+def rumpling():
+    MLs = ModeLandscape(u=4, modelist=['X3+_LTO_0.0', 'X3+_LTO_0.5',
+                                       'X3+_LTO_1.0'],
+                        coordmax=0.75,
+                        rumpling=True)
+    MLs.get_data(keep_data=True)
+    MLs.rumpling_plots()
+
 
 
 if __name__ == "__main__":
-   main() 
+    main()

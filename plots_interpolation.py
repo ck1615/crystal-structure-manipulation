@@ -288,20 +288,46 @@ class ModeLandscape:
         # Extract high-symmetry data
         self.get_high_symmetry_data()
 
-        # Define labels
-        lto_label = r"$\theta = 0$° ($X_{3}^{+}$(a;0)) LTO strain"
-        ltt_label = r"$\theta = 45$° ($X_{3}^{+}$(a;a)) LTT strain"
-
         # Extract LTO for LTO cell and LTT for LTT cell
         for mode in self.modeList:
             if 'GM1+' in mode:
-                continue
-            if 'X3+_LTO' in mode:
+                # Define labels
+                lto_label = r"$\theta = 0$°" + \
+                    " ($\mathrm{X}_{3}^{+}|\mathrm{\Gamma}_1^+$(a;0)) " + \
+                    "LTO strain"
+                ltt_label = r"$\theta = 45$°" + \
+                    " ($\mathrm{X}_{3}^{+}|\mathrm{\Gamma}_1^+$(a;a)) " + \
+                    "LTT strain"
+                xlabel = r"$|(\mathrm{X}_{3}^{+}|\mathrm{\Gamma}_1^+)|$ / Å"
+
                 lto_dict = self.high_sym_data[mode]['LTO']
                 lto_key = self.get_phase_positions(mode)[0][0][0]
                 (x_lto, y_lto) = list(lto_dict.keys()), list(lto_dict.values())
                 lto_itp = interp1d(x_lto, y_lto)
+
+                ltt_dict = self.high_sym_data[mode]['LTT']
+                ltt_key = round(self.get_phase_positions(mode)[1][0][0] *
+                                np.sqrt(2), 3)
+                (x_ltt, y_ltt) = list(ltt_dict.keys()), list(ltt_dict.values())
+                ltt_itp = interp1d(x_ltt, y_ltt)
+
+                # Stop iterating over any other modes if GM1+
+                pass
+
+            if 'X3+_LTO' in mode:
+                # Define label
+                lto_label = r"$\theta = 0$° ($X_{3}^{+}$(a;0)) LTO strain"
+
+                lto_dict = self.high_sym_data[mode]['LTO']
+                lto_key = self.get_phase_positions(mode)[0][0][0]
+                (x_lto, y_lto) = list(lto_dict.keys()), list(lto_dict.values())
+                lto_itp = interp1d(x_lto, y_lto)
+
+                xlabel = r"$|\mathrm{X}_{3}^{+}|$ / Å"
             elif 'X3+_LTT' in mode:
+                # Define label
+                ltt_label = r"$\theta = 45$° ($X_{3}^{+}$(a;a)) LTT strain"
+
                 ltt_dict = self.high_sym_data[mode]['LTT']
                 ltt_key = round(self.get_phase_positions(mode)[1][0][0] *
                                 np.sqrt(2), 3)
@@ -321,19 +347,24 @@ class ModeLandscape:
         ax.plot(xi, ltt_itp(xi), color='b', linestyle='-.', linewidth=2)
 
         # Place positions of minima
-        ax.scatter(lto_key, lto_dict[lto_key], color='k', marker='o', s=20)
-        ax.scatter(ltt_key, ltt_dict[ltt_key], color='k', marker='o', s=20)
+        try:
+            ax.scatter(lto_key, lto_dict[lto_key], color='k', marker='o', s=20)
+        except KeyError:
+            ax.scatter(lto_key, lto_dict[lto_key-0.001], color='k', marker='o',s=20)
+        try:
+            ax.scatter(ltt_key, ltt_dict[ltt_key+0.001], color='k', marker='o', s=20)
+        except KeyError:
+            ax.scatter(ltt_key, ltt_dict[ltt_key], color='k', marker='o', s=20)
 
         # Label plot 
-        ax.set_xlabel(r'$|X_{3}^{+}|$ / Å')
+        ax.set_xlabel(xlabel)
         ax.set_ylabel(r'$E - E_{\mathrm{HTT}}$ / meV/(f.u.)')
         ax.axhline(y=0, color='k', linestyle='solid',
                    linewidth=self.datapoints_linewidth)
 
         # Plot vertical line at divergence point
-        #ax.arrow(0.35, -100, 0, 40) 
-        ax.annotate("", xy=(0.35, -58), xytext=(0.35, -100),
-                    arrowprops=dict(arrowstyle="->"))
+        # ax.annotate("", xy=(0.35, -58), xytext=(0.35, -100),
+        #            arrowprops=dict(arrowstyle="->"))
 
         # Place limits
         ax.legend(loc=(0.01, 0.78))
@@ -406,7 +437,7 @@ class ModeLandscape:
 
         #Mode name
         if 'GM1+' in self.modeList[i]:
-            mode_plotname = '\Gamma_{1}^{+}'
+            mode_plotname = '(X_{3}^{+}|\Gamma_{1}^{+})'
         elif 'X3+' in self.modeList[i]:
             mode_plotname = 'X_{3}^{+}'
 
@@ -570,7 +601,8 @@ class ModeLandscape:
 
 def main():
     MLs = ModeLandscape(u=4, modelist=['GM1+_56', 'X3+_LTO', 'X3+_LTT'],
-            coordmax=0.75)
+                        coordmax=0.75,
+                        figname='ModeLandscape_X3+_Cuts.pdf')
     MLs.get_data(keep_data=True)
     MLs.paper_plot()
     #MLs.contour_highsym_plot()
@@ -579,9 +611,9 @@ def main():
 def rumpling():
     MLs = ModeLandscape(u=4, modelist=['X3+_LTO_0.0', 'X3+_LTO_0.5',
                                        'X3+_LTO_1.0'],
-                        coordmax=0.75,
+                        coordmax=1.0,
                         rumpling=True)
-    MLs.get_data(keep_data=True)
+    MLs.get_data(keep_data=False)
     MLs.rumpling_plots()
 
 
